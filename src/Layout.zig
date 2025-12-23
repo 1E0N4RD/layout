@@ -689,7 +689,7 @@ fn wrap(l: *Layout, id: u32) !void {
             e.height_range = .initExact(l.text_measure.getWrappedHeight(
                 t.font_id,
                 t.string,
-                e.width,
+                e.width - e.spec.padding.width(),
             ));
         },
     }
@@ -697,43 +697,43 @@ fn wrap(l: *Layout, id: u32) !void {
     e.height_range = e.spec.height.intersect(e.height_range);
 }
 
-fn createInstructions(self: *Layout) ![]const Instruction {
-    self.instructions.clearRetainingCapacity();
+fn createInstructions(l: *Layout) ![]const Instruction {
+    l.instructions.clearRetainingCapacity();
     var i: usize = 0;
-    while (i < self.elements.items.len) {
-        const element = self.elements.items[i];
-        if (element.render) {
+    while (i < l.elements.items.len) {
+        const e = l.elements.items[i];
+        if (e.render) {
             i += 1;
-            const instruction = switch (element.as) {
+            const instruction = switch (e.as) {
                 .vbox, .hbox, .box => Instruction{
                     .rect = .{
-                        .x = element.x,
-                        .y = element.y,
-                        .fg = element.spec.fg,
-                        .bg = element.spec.bg,
-                        .w = element.width,
-                        .h = element.height,
-                        .frame_width = element.spec.frame_width,
+                        .x = e.x,
+                        .y = e.y,
+                        .fg = e.spec.fg,
+                        .bg = e.spec.bg,
+                        .w = e.width,
+                        .h = e.height,
+                        .frame_width = e.spec.frame_width,
                     },
                 },
                 .text => |t| Instruction{
                     .text = .{
-                        .fg = element.spec.fg,
-                        .x = element.x,
-                        .y = element.y,
-                        .w = element.width,
+                        .fg = e.spec.fg,
+                        .x = e.x + e.spec.padding.top,
+                        .y = e.y + e.spec.padding.left,
+                        .w = e.width - e.spec.padding.width(),
                         .string = t.string,
                         .font_id = t.font_id,
                     },
                 },
             };
 
-            try self.instructions.append(self.allocator, instruction);
+            try l.instructions.append(l.allocator, instruction);
         } else {
-            i += element.next;
+            i += e.next;
         }
     }
-    return self.instructions.items;
+    return l.instructions.items;
 }
 
 pub fn end(self: *Layout) ![]const Instruction {
@@ -1055,7 +1055,8 @@ const TextOptions = struct {
 /// @param string String to be drawn. Function makes copy.
 /// @param options
 pub fn text(self: *Layout, font: u16, string: []const u8, options: TextOptions) !void {
-    const text_width_range = self.text_measure.getTextWidthRange(font, string);
+    var text_width_range = self.text_measure.getTextWidthRange(font, string);
+    text_width_range.add(options.padding.width());
     const width_range = options.width.intersect(text_width_range);
 
     const string_copy = try self.string_arena.allocator().dupe(u8, string);

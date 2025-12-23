@@ -214,7 +214,7 @@ fn doLayout(
             }
             try layout.box(&gui_state.vertical_resize_bar, .{ .width = .fixed(10), .bg = .white });
             try layout.beginVBox(.{ .bg = .white });
-            try layout.text(0, lore_ipsum, .{});
+            try layout.text(0, lore_ipsum, .{ .padding = .uniform(10) });
             try layout.endVBox();
 
             try layout.box(&gui_state.main_panel, .{ .bg = .green, .width = .max(400) });
