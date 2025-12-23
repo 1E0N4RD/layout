@@ -50,6 +50,7 @@ pub const Color = struct {
     g: u8,
     b: u8,
     a: u8,
+
     pub const black = Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
     pub const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
     pub const red = Color{ .r = 255, .g = 0, .b = 0, .a = 255 };
@@ -59,59 +60,59 @@ pub const Color = struct {
     pub const transparent = Color{ .r = 0, .g = 0, .b = 0, .a = 0 };
 };
 
-const Text = struct {
-    buffer: []const u8,
-    lines: std.ArrayList([2]usize),
-    fn init(str: []const u8, allocator: std.mem.Allocator) !Text {
-        var res: Text = .{ .buffer = str, .lines = .empty };
-        const view = try std.unicode.Utf8View.init(str);
-        var iterator = view.iterator();
-
-        var lo: ?usize = null;
-        var i: usize = 0;
-        while (iterator.nextCodepoint()) |c| {
-            switch (c) {
-                '\n' => {
-                    if (lo) |l| {
-                        try res.lines.append(allocator, .{ l, i });
-                        lo = null;
-                    }
-                },
-
-                else => if (lo == null) {
-                    lo = i;
-                },
-            }
-
-            i = iterator.i;
-        }
-
-        if (lo) |l| {
-            try res.lines.append(allocator, .{ l, i });
-        }
-
-        return res;
-    }
-    fn deinit(self: *Text, allocator: std.mem.Allocator) void {
-        self.lines.deinit(allocator);
-    }
-
-    fn getLine(self: Text, i: usize) []const u8 {
-        const lo, const hi = self.lines.items[i];
-        return self.buffer[lo..hi];
-    }
-};
-
-test "Text" {
-    const testing = std.testing;
-    const string = "€§\nHallo wie gehts?\nh";
-    var txt = try Text.init(string, testing.allocator);
-    defer txt.deinit(testing.allocator);
-
-    try testing.expectEqualStrings(txt.getLine(0), "€§");
-    try testing.expectEqualStrings(txt.getLine(1), "");
-    try testing.expectEqualStrings(txt.getLine(2), "Hallo wie gehts?");
-}
+// const Text = struct {
+//     buffer: []const u8,
+//     lines: std.ArrayList([2]usize),
+//     fn init(str: []const u8, allocator: std.mem.Allocator) !Text {
+//         var res: Text = .{ .buffer = str, .lines = .empty };
+//         const view = try std.unicode.Utf8View.init(str);
+//         var iterator = view.iterator();
+//
+//         var lo: ?usize = null;
+//         var i: usize = 0;
+//         while (iterator.nextCodepoint()) |c| {
+//             switch (c) {
+//                 '\n' => {
+//                     if (lo) |l| {
+//                         try res.lines.append(allocator, .{ l, i });
+//                         lo = null;
+//                     }
+//                 },
+//
+//                 else => if (lo == null) {
+//                     lo = i;
+//                 },
+//             }
+//
+//             i = iterator.i;
+//         }
+//
+//         if (lo) |l| {
+//             try res.lines.append(allocator, .{ l, i });
+//         }
+//
+//         return res;
+//     }
+//     fn deinit(self: *Text, allocator: std.mem.Allocator) void {
+//         self.lines.deinit(allocator);
+//     }
+//
+//     fn getLine(self: Text, i: usize) []const u8 {
+//         const lo, const hi = self.lines.items[i];
+//         return self.buffer[lo..hi];
+//     }
+// };
+//
+// test "Text" {
+//     const testing = std.testing;
+//     const string = "€§\nHallo wie gehts?\nh";
+//     var txt = try Text.init(string, testing.allocator);
+//     defer txt.deinit(testing.allocator);
+//
+//     try testing.expectEqualStrings(txt.getLine(0), "€§");
+//     try testing.expectEqualStrings(txt.getLine(1), "");
+//     try testing.expectEqualStrings(txt.getLine(2), "Hallo wie gehts?");
+// }
 
 pub const RectInstruction = struct {
     fg: Color,
@@ -191,15 +192,16 @@ const Element = struct {
     next: u32 = 1,
     x: u16 = 0,
     y: u16 = 0,
-    width: u16 = 0,
-    height: u16 = 0,
-    width_range: Range = .any,
-    height_range: Range = .any,
+    w: u16 = 0,
+    h: u16 = 0,
+    w_range: Range = .any,
+    h_range: Range = .any,
     render: bool = true,
+    result: ?*Rect,
 
     spec: struct {
-        width: Spec,
-        height: Spec,
+        w: Spec,
+        h: Spec,
         fg: Color,
         bg: Color,
         padding: Padding,
@@ -219,9 +221,7 @@ const Element = struct {
             spill: bool,
             gap: u16,
         },
-        box: struct {
-            result: ?*Rect,
-        },
+        box,
         text: struct {
             string: []const u8, // TODO: Move this somewhere else.
             font_id: u16,
@@ -230,16 +230,16 @@ const Element = struct {
     },
 
     fn canWidthGrow(self: Element) bool {
-        return self.width < self.width_range.hi;
+        return self.w < self.w_range.hi;
     }
     fn canWidthShrink(self: Element) bool {
-        return self.width_range.lo < self.width;
+        return self.w_range.lo < self.w;
     }
     fn canHeightGrow(self: Element) bool {
-        return self.height < self.height_range.hi;
+        return self.h < self.h_range.hi;
     }
     fn canHeightShrink(self: Element) bool {
-        return self.height_range.lo < self.height;
+        return self.h_range.lo < self.h;
     }
 };
 
@@ -295,58 +295,52 @@ pub fn begin(l: *Layout, width: u16, height: u16) void {
 }
 
 fn endElement(l: *Layout, e: *Element) !void {
-    e.width_range.add(e.spec.padding.width());
-    e.width_range = e.spec.width.intersect(e.width_range);
+    e.w_range.add(e.spec.padding.width());
+    e.w_range = e.spec.w.intersect(e.w_range);
 
     const lo = l.stack.pop().?;
     const hi: u32 = @intCast(l.elements.items.len);
 
-    try l.accumulateParentWidth(e.width_range);
-    try l.incrementParent(hi - lo);
+    try l.accumulateParentWidth(e.w_range);
+    l.incrementParent(hi - lo);
 }
 
 fn resolvePositions(l: *Layout, id: usize, x: u16, y: u16) void {
-    const element = &l.elements.items[id];
+    const e = &l.elements.items[id];
 
-    element.x = x;
-    element.y = y;
-    switch (element.as) {
+    e.x = x;
+    e.y = y;
+    if (e.result) |result| {
+        result.* = .{ .x = e.x, .y = e.y, .w = e.w, .h = e.h };
+    }
+    switch (e.as) {
         .hbox => |b| {
-            var child_x = x + element.spec.padding.left;
-            const child_y = y + element.spec.padding.top;
+            var child_x = x + e.spec.padding.left;
+            const child_y = y + e.spec.padding.top;
 
             var iterator = l.childIterator(id);
             while (iterator.nextPair()) |pair| {
                 const child, const child_id = pair;
 
                 l.resolvePositions(child_id, child_x, child_y);
-                child_x += child.width;
+                child_x += child.w;
                 child_x += b.gap;
             }
         },
         .vbox => |b| {
-            const child_x = x + element.spec.padding.left;
-            var child_y = y + element.spec.padding.top;
+            const child_x = x + e.spec.padding.left;
+            var child_y = y + e.spec.padding.top;
 
             var iterator = l.childIterator(id);
             while (iterator.nextPair()) |pair| {
                 const child, const child_id = pair;
 
                 l.resolvePositions(child_id, child_x, child_y);
-                child_y += child.height;
+                child_y += child.h;
                 child_y += b.gap;
             }
         },
-        .box => |b| {
-            if (b.result) |result| {
-                result.* = .{
-                    .x = x,
-                    .y = y,
-                    .w = element.width,
-                    .h = element.height,
-                };
-            }
-        },
+        .box => {},
         .text => {},
     }
 }
@@ -368,10 +362,10 @@ fn resizeWidthsHBox(
     // First is handled separatly because it does not get a gap.
     if (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
-        child.width = child.width_range.lo;
-        if (required + child.width_range.lo <= width) {
-            child.width = child.width;
-            required += child.width;
+        child.w = child.w_range.lo;
+        if (required + child.w_range.lo <= width) {
+            child.w = child.w;
+            required += child.w;
             last_child_id = child_id;
             hbox.rendered_children += 1;
         } else {
@@ -380,9 +374,9 @@ fn resizeWidthsHBox(
     }
     while (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
-        child.width = child.width_range.lo;
-        if (required + hbox.gap + child.width <= width) {
-            required += hbox.gap + child.width;
+        child.w = child.w_range.lo;
+        if (required + hbox.gap + child.w <= width) {
+            required += hbox.gap + child.w;
             last_child_id = child_id;
             hbox.rendered_children += 1;
         } else {
@@ -402,14 +396,14 @@ fn resizeWidthsHBox(
             while (iterator.next()) |child| {
                 if (!child.canWidthGrow()) continue;
 
-                if (child.width < smallest) {
+                if (child.w < smallest) {
                     smallest_count = 1;
                     second_smallest = smallest;
-                    smallest = child.width;
-                } else if (child.width == smallest) {
+                    smallest = child.w;
+                } else if (child.w == smallest) {
                     smallest_count += 1;
-                } else if (child.width < second_smallest) {
-                    second_smallest = child.width;
+                } else if (child.w < second_smallest) {
+                    second_smallest = child.w;
                 }
             }
 
@@ -423,13 +417,13 @@ fn resizeWidthsHBox(
             while (iterator.next()) |child| {
                 if (!child.canWidthGrow()) continue;
 
-                if (child.width == smallest) {
+                if (child.w == smallest) {
                     const additional = @min(
                         remaining,
                         extra_width,
-                        child.width_range.hi - child.width,
+                        child.w_range.hi - child.w,
                     );
-                    child.width += additional;
+                    child.w += additional;
                     remaining -= additional;
                 }
             }
@@ -446,14 +440,14 @@ fn resizeWidthsHBox(
             while (iterator.next()) |child| {
                 if (!child.canWidthShrink()) continue;
 
-                if (child.width > largest) {
+                if (child.w > largest) {
                     largest_count = 1;
                     second_largest = largest;
-                    largest = child.width;
-                } else if (child.width == largest) {
+                    largest = child.w;
+                } else if (child.w == largest) {
                     largest_count += 1;
-                } else if (child.width > second_largest) {
-                    second_largest = child.width;
+                } else if (child.w > second_largest) {
+                    second_largest = child.w;
                 }
             }
 
@@ -467,12 +461,12 @@ fn resizeWidthsHBox(
             while (iterator.next()) |child| {
                 if (!child.canWidthShrink()) continue;
 
-                if (child.width == largest) {
+                if (child.w == largest) {
                     const additional = @min(
                         @min(remaining, extra_width),
-                        child.width - child.width_range.lo,
+                        child.w - child.w_range.lo,
                     );
-                    child.width -= additional;
+                    child.w -= additional;
                     remaining -= additional;
                 }
             }
@@ -482,9 +476,9 @@ fn resizeWidthsHBox(
     iterator = self.childIteratorTo(id, last_child_id);
     while (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
-        self.resizeWidths(child_id, child.width);
+        self.resizeWidths(child_id, child.w);
     }
-    element.width = width;
+    element.w = width;
 }
 
 fn resizeWidths(l: *Layout, id: usize, width: u16) void {
@@ -501,7 +495,7 @@ fn resizeWidths(l: *Layout, id: usize, width: u16) void {
         .box => {},
         .text => {},
     }
-    element.width = width;
+    element.w = width;
 }
 
 fn resizeHeightsVBox(
@@ -520,9 +514,9 @@ fn resizeHeightsVBox(
 
     if (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
-        child.height = child.height_range.lo;
-        if (required + child.height_range.lo <= height) {
-            required += child.height;
+        child.h = child.h_range.lo;
+        if (required + child.h_range.lo <= height) {
+            required += child.h;
             last_child_id = child_id;
             vbox.rendered_children += 1;
         } else {
@@ -531,9 +525,9 @@ fn resizeHeightsVBox(
     }
     while (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
-        child.height = child.height_range.lo;
-        if (required + vbox.gap + child.height_range.lo <= height) {
-            required += vbox.gap + child.height;
+        child.h = child.h_range.lo;
+        if (required + vbox.gap + child.h_range.lo <= height) {
+            required += vbox.gap + child.h;
             last_child_id = child_id;
             vbox.rendered_children += 1;
         } else {
@@ -553,14 +547,14 @@ fn resizeHeightsVBox(
             while (iterator.next()) |child| {
                 if (!child.canHeightGrow()) continue;
 
-                if (child.height < smallest) {
+                if (child.h < smallest) {
                     smallest_count = 1;
                     second_smallest = smallest;
-                    smallest = child.height;
-                } else if (child.height == smallest) {
+                    smallest = child.h;
+                } else if (child.h == smallest) {
                     smallest_count += 1;
-                } else if (child.height < second_smallest) {
-                    second_smallest = child.height;
+                } else if (child.h < second_smallest) {
+                    second_smallest = child.h;
                 }
             }
 
@@ -574,13 +568,13 @@ fn resizeHeightsVBox(
             while (iterator.next()) |child| {
                 if (!child.canHeightGrow()) continue;
 
-                if (child.height == smallest) {
+                if (child.h == smallest) {
                     const additional = @min(
                         remaining,
                         extra,
-                        child.height_range.hi - child.height,
+                        child.h_range.hi - child.h,
                     );
-                    child.height += additional;
+                    child.h += additional;
                     remaining -= additional;
                 }
             }
@@ -597,14 +591,14 @@ fn resizeHeightsVBox(
             while (iterator.next()) |child| {
                 if (!child.canHeightShrink()) continue;
 
-                if (child.height > largest) {
+                if (child.h > largest) {
                     largest_count = 1;
                     second_largest = largest;
-                    largest = child.height;
-                } else if (child.height == largest) {
+                    largest = child.h;
+                } else if (child.h == largest) {
                     largest_count += 1;
-                } else if (child.height > second_largest) {
-                    second_largest = child.height;
+                } else if (child.h > second_largest) {
+                    second_largest = child.h;
                 }
             }
 
@@ -618,12 +612,12 @@ fn resizeHeightsVBox(
             while (iterator.next()) |child| {
                 if (!child.canHeightShrink()) continue;
 
-                if (child.height == largest) {
+                if (child.h == largest) {
                     const additional = @min(
                         @max(remaining, extra_height),
-                        child.height - child.height_range.lo,
+                        child.h - child.h_range.lo,
                     );
-                    child.height -= additional;
+                    child.h -= additional;
                     remaining -= additional;
                 }
             }
@@ -633,9 +627,9 @@ fn resizeHeightsVBox(
     iterator = l.childIteratorTo(id, last_child_id);
     while (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
-        l.resizeHeights(child_id, child.height);
+        l.resizeHeights(child_id, child.h);
     }
-    e.height = height;
+    e.h = height;
 }
 
 fn resizeHeights(self: *Layout, id: u32, height: u16) void {
@@ -646,11 +640,11 @@ fn resizeHeights(self: *Layout, id: u32, height: u16) void {
             while (iterator.nextId()) |child_id| {
                 self.resizeHeights(child_id, height - e.spec.padding.height());
             }
-            e.height = height;
+            e.h = height;
         },
         .vbox => |*vbox| self.resizeHeightsVBox(e, vbox, id, height),
-        .box => e.height = height,
-        .text => e.height = height,
+        .box => e.h = height,
+        .text => e.h = height,
     }
 }
 
@@ -665,10 +659,10 @@ fn wrap(l: *Layout, id: u32) !void {
                 if (!child.render) continue;
 
                 try l.wrap(child_id);
-                e.height_range.accumulateSerial(
+                e.h_range.accumulateSerial(
                     vbox.spill,
                     if (first) 0 else vbox.gap,
-                    child.height_range,
+                    child.h_range,
                 );
             }
         },
@@ -681,20 +675,20 @@ fn wrap(l: *Layout, id: u32) !void {
 
                 try l.wrap(child_id);
 
-                try e.height_range.accumulateParallel(child.height_range);
+                try e.h_range.accumulateParallel(child.h_range);
             }
         },
         .box => {},
         .text => |t| {
-            e.height_range = .initExact(l.text_measure.getWrappedHeight(
+            e.h_range = .initExact(l.text_measure.getWrappedHeight(
                 t.font_id,
                 t.string,
-                e.width - e.spec.padding.width(),
+                e.w - e.spec.padding.width(),
             ));
         },
     }
-    e.height_range.add(e.spec.padding.height());
-    e.height_range = e.spec.height.intersect(e.height_range);
+    e.h_range.add(e.spec.padding.height());
+    e.h_range = e.spec.h.intersect(e.h_range);
 }
 
 fn createInstructions(l: *Layout) ![]const Instruction {
@@ -711,8 +705,8 @@ fn createInstructions(l: *Layout) ![]const Instruction {
                         .y = e.y,
                         .fg = e.spec.fg,
                         .bg = e.spec.bg,
-                        .w = e.width,
-                        .h = e.height,
+                        .w = e.w,
+                        .h = e.h,
                         .frame_width = e.spec.frame_width,
                     },
                 },
@@ -721,7 +715,7 @@ fn createInstructions(l: *Layout) ![]const Instruction {
                         .fg = e.spec.fg,
                         .x = e.x + e.spec.padding.top,
                         .y = e.y + e.spec.padding.left,
-                        .w = e.width - e.spec.padding.width(),
+                        .w = e.w - e.spec.padding.width(),
                         .string = t.string,
                         .font_id = t.font_id,
                     },
@@ -737,34 +731,10 @@ fn createInstructions(l: *Layout) ![]const Instruction {
 }
 
 pub fn end(self: *Layout) ![]const Instruction {
-    // var stderr_buffer: [1048]u8 = undefined;
-    // var stderr = std.fs.File.stderr().writer(&stderr_buffer);
-
-    // stderr.interface.print("\n\n\n", .{}) catch unreachable;
-    // stderr.interface.print("Start\n", .{}) catch unreachable;
-    // self.print(&stderr.interface) catch unreachable;
-    // stderr.interface.flush() catch unreachable;
-
     self.resizeWidths(0, self.width);
-    // stderr.interface.print("Resize widths\n", .{}) catch unreachable;
-    // self.print(&stderr.interface) catch unreachable;
-    // stderr.interface.flush() catch unreachable;
-
     try self.wrap(0);
-    // stderr.interface.print("Wrap text\n", .{}) catch unreachable;
-    // self.print(&stderr.interface) catch unreachable;
-    // stderr.interface.flush() catch unreachable;
-
     self.resizeHeights(0, self.height);
-    // stderr.interface.print("Resize heights\n", .{}) catch unreachable;
-    // self.print(&stderr.interface) catch unreachable;
-    // stderr.interface.flush() catch unreachable;
-
     self.resolvePositions(0, 0, 0);
-    // stderr.interface.print("Resolve Positions\n", .{}) catch unreachable;
-    // self.print(&stderr.interface) catch unreachable;
-    // stderr.interface.flush() catch unreachable;
-
     return self.createInstructions();
 }
 
@@ -887,6 +857,7 @@ const BoxOptions = struct {
     spill: bool = false,
     fg: Color = .black,
     bg: Color = .white,
+    result: ?*Rect = null,
 };
 
 fn getParent(l: *Layout) ?*Element {
@@ -900,11 +871,11 @@ fn accumulateParentWidth(l: *Layout, width: Range) !void {
 
     switch (parent.as) {
         .vbox => {
-            try parent.width_range.accumulateParallel(width);
+            try parent.w_range.accumulateParallel(width);
         },
         .hbox => |*b| {
             const gap = if (first_child) 0 else b.gap;
-            parent.width_range.accumulateSerial(b.spill, gap, width);
+            parent.w_range.accumulateSerial(b.spill, gap, width);
         },
         else => unreachable,
     }
@@ -926,45 +897,44 @@ fn accumulateParentHeight(l: *Layout, height: Range) !void {
     }
 }
 
-fn incrementParent(
-    self: *Layout,
-    n: u32,
-) !void {
-    if (self.getParent()) |parent| {
-        parent.next += n;
-    }
+fn incrementParent(self: *Layout, n: u32) void {
+    if (self.getParent()) |parent| parent.next += n;
 }
 
 pub fn box(self: *Layout, result: ?*Rect, options: BoxOptions) !void {
     const element = Element{
-        .width = options.width.r.lo,
-        .width_range = options.width.r,
+        .w = options.width.r.lo,
+        .w_range = options.width.r,
+        .result = result,
         .spec = .{
             .frame_width = 1,
             .fg = options.fg,
             .bg = options.bg,
-            .width = options.width,
-            .height = options.height,
+            .w = options.width,
+            .h = options.height,
             .padding = options.padding,
         },
-        .as = .{ .box = .{ .result = result } },
+        .as = .box,
     };
     try self.elements.append(self.allocator, element);
 
-    try self.accumulateParentWidth(element.spec.width.r);
-    try self.incrementParent(1);
+    try self.accumulateParentWidth(element.spec.w.r);
+    self.incrementParent(1);
 }
 pub fn beginHBox(self: *Layout, options: BoxOptions) !void {
     const id = self.elements.items.len;
     try self.elements.append(
         self.allocator,
         .{
+            .w_range = .initSerial,
+            .h_range = .initParallel,
+            .result = options.result,
             .spec = .{
                 .frame_width = 1,
                 .fg = options.fg,
                 .bg = options.bg,
-                .width = options.width,
-                .height = options.height,
+                .w = options.width,
+                .h = options.height,
                 .padding = options.padding,
             },
             .as = .{ .hbox = .{
@@ -989,14 +959,15 @@ pub fn beginVBox(self: *Layout, options: BoxOptions) !void {
     try self.elements.append(
         self.allocator,
         .{
-            .width_range = .initParallel,
-            .height_range = .initSerial,
+            .w_range = .initParallel,
+            .h_range = .initSerial,
+            .result = options.result,
             .spec = .{
                 .frame_width = 1,
                 .fg = options.fg,
                 .bg = options.bg,
-                .width = options.width,
-                .height = options.height,
+                .w = options.width,
+                .h = options.height,
                 .padding = options.padding,
             },
             .as = .{ .vbox = .{
@@ -1047,6 +1018,7 @@ const TextOptions = struct {
     gap: u16 = 5,
     fg: Color = .black,
     bg: Color = .transparent,
+    result: ?*Rect = null,
 };
 
 /// Draw text.
@@ -1061,14 +1033,15 @@ pub fn text(self: *Layout, font: u16, string: []const u8, options: TextOptions) 
 
     const string_copy = try self.string_arena.allocator().dupe(u8, string);
     try self.elements.append(self.allocator, .{
-        .width_range = width_range,
+        .w_range = width_range,
         .spec = .{
             .fg = options.fg,
             .bg = options.bg,
-            .width = options.width,
-            .height = options.height,
+            .w = options.width,
+            .h = options.height,
             .padding = options.padding,
         },
+        .result = options.result,
         .as = .{ .text = .{
             .string = string_copy,
             .gap = options.gap,
@@ -1076,7 +1049,7 @@ pub fn text(self: *Layout, font: u16, string: []const u8, options: TextOptions) 
         } },
     });
     try self.accumulateParentWidth(width_range);
-    try self.incrementParent(1);
+    self.incrementParent(1);
 }
 
 pub fn textBox(
@@ -1097,51 +1070,40 @@ pub fn body(self: *Layout, string: []const u8) void {
 }
 
 fn doPrint(self: *Layout, writer: *std.Io.Writer, id: usize, depth: usize) !void {
-    const element = self.elements.items[id];
+    const e = self.elements.items[id];
     for (0..depth) |_| try writer.print("  ", .{});
-    switch (element.as) {
+    switch (e.as) {
         .box => {
-            try writer.print("Box x={} y={} w={} h={}\n", .{
-                element.x,
-                element.y,
-                element.width,
-                element.height,
-            });
+            try writer.print(
+                "Box x={} y={} w={} h={}\n",
+                .{ e.x, e.y, e.w, e.h },
+            );
         },
         .hbox => {
-            try writer.print("HBox x={} y={} w={} h={} next={}\n", .{
-                element.x,
-                element.y,
-                element.width,
-                element.height,
-                element.next,
-            });
+            try writer.print(
+                "HBox x={} y={} w={} h={} next={}\n",
+                .{ e.x, e.y, e.w, e.h, e.next },
+            );
             var iterator = self.childIterator(id);
             while (iterator.nextId()) |child_id| {
                 try self.doPrint(writer, child_id, depth + 1);
             }
         },
         .vbox => {
-            try writer.print("VBox x={} y={} w={} h={} next={}\n", .{
-                element.x,
-                element.y,
-                element.width,
-                element.height,
-                element.next,
-            });
+            try writer.print(
+                "VBox x={} y={} w={} h={} next={}\n",
+                .{ e.x, e.y, e.w, e.h, e.next },
+            );
             var iterator = self.childIterator(id);
             while (iterator.nextId()) |child_id| {
                 try self.doPrint(writer, child_id, depth + 1);
             }
         },
         .text => |t| {
-            try writer.print("Text x={} y={} w={} h={} \"{s}\"\n", .{
-                element.x,
-                element.y,
-                element.width,
-                element.height,
-                t.string,
-            });
+            try writer.print(
+                "Text x={} y={} w={} h={} \"{s}\"\n",
+                .{ e.x, e.y, e.w, e.h, t.string },
+            );
         },
     }
 }
