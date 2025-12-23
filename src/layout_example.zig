@@ -6,6 +6,8 @@ const assertSdl = layout_sdl.assertSdl;
 
 const cantarell_bold = @embedFile("assets/Cantarell-Bold.ttf");
 
+const lore_ipsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
 const Vec2 = @Vector(2, f64);
 
 const GuiAssets = struct {
@@ -211,7 +213,11 @@ fn doLayout(
                 try layout.endVBox();
             }
             try layout.box(&gui_state.vertical_resize_bar, .{ .width = .fixed(10), .bg = .white });
-            try layout.box(&gui_state.main_panel, .{ .bg = .green });
+            try layout.beginVBox(.{ .bg = .white });
+            try layout.text(0, lore_ipsum, .{});
+            try layout.endVBox();
+
+            try layout.box(&gui_state.main_panel, .{ .bg = .green, .width = .max(400) });
 
             try layout.endHBox();
         }
