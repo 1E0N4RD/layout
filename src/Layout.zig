@@ -948,6 +948,8 @@ fn incrementParent(self: *Layout, n: u32) void {
 }
 
 pub fn box(self: *Layout, options: BoxOptions) !void {
+    if (options.result) |result| result.* = .init;
+
     const element = Element{
         .w = options.width.r.lo,
         .w_range = options.width.r,
@@ -969,6 +971,7 @@ pub fn box(self: *Layout, options: BoxOptions) !void {
     self.incrementParent(1);
 }
 pub fn beginHBox(self: *Layout, options: BoxOptions) !void {
+    if (options.result) |result| result.* = .init;
     const id = self.elements.items.len;
     try self.elements.append(
         self.allocator,
@@ -1002,6 +1005,7 @@ pub fn endHBox(l: *Layout) !void {
 }
 
 pub fn beginVBox(self: *Layout, options: BoxOptions) !void {
+    if (options.result) |result| result.* = .init;
     const id = self.elements.items.len;
     try self.elements.append(
         self.allocator,
@@ -1075,6 +1079,8 @@ const TextOptions = struct {
 /// @param string String to be drawn. Function makes copy.
 /// @param options
 pub fn text(self: *Layout, font: u16, string: []const u8, options: TextOptions) !void {
+    if (options.result) |result| result.* = .init;
+
     var text_width_range = self.text_measure.getTextWidthRange(font, string);
     text_width_range.add(options.padding.width());
     const width_range = options.width.intersect(text_width_range);
