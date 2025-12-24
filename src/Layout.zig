@@ -188,6 +188,26 @@ pub const TextMeasure = struct {
     }
 };
 
+pub fn printElementLayout() void {
+    const info = @typeInfo(Element);
+    const structure = info.@"struct";
+    const Field = struct { []const u8, usize };
+    var fields: [structure.fields.len]Field = undefined;
+    std.debug.print("Element: {}\n", .{@sizeOf(Element)});
+    inline for (structure.fields, &fields) |field, *f| {
+        f.* = .{ field.name, @offsetOf(Element, field.name) };
+    }
+    const Context = struct {
+        fn lessThan(_: void, a: Field, b: Field) bool {
+            return a[1] < b[1];
+        }
+    };
+    std.sort.heap(Field, &fields, {}, Context.lessThan);
+    for (&fields) |field| {
+        std.debug.print("{s}: {}\n", field);
+    }
+}
+
 const Element = struct {
     next: u32 = 1,
     x: u16 = 0,
@@ -206,19 +226,18 @@ const Element = struct {
         bg: Color,
         padding: Padding,
         frame_width: u16 = 0,
+        spill: bool,
     },
 
     as: union(enum) {
         hbox: struct {
             rendered_children: u16,
             render_empty: bool,
-            spill: bool,
             gap: u16,
         },
         vbox: struct {
             rendered_children: u16,
             render_empty: bool,
-            spill: bool,
             gap: u16,
         },
         box,
@@ -660,7 +679,7 @@ fn wrap(l: *Layout, id: u32) !void {
 
                 try l.wrap(child_id);
                 e.h_range.accumulateSerial(
-                    vbox.spill,
+                    e.spec.spill,
                     if (first) 0 else vbox.gap,
                     child.h_range,
                 );
@@ -680,11 +699,15 @@ fn wrap(l: *Layout, id: u32) !void {
         },
         .box => {},
         .text => |t| {
-            e.h_range = .initExact(l.text_measure.getWrappedHeight(
+            const height = l.text_measure.getWrappedHeight(
                 t.font_id,
                 t.string,
                 e.w - e.spec.padding.width(),
-            ));
+            );
+            e.h_range = if (e.spec.spill)
+                .initMax(height)
+            else
+                .initExact(height);
         },
     }
     e.h_range.add(e.spec.padding.height());
@@ -790,12 +813,20 @@ pub const Spec = struct {
 const Range = struct {
     lo: u16,
     hi: u16,
+
     const any = Range{ .lo = 0, .hi = 0xffff };
     const zero = Range{ .lo = 0, .hi = 0 };
     const initParallel = any;
     const initSerial = zero;
+
     fn initExact(value: u16) Range {
         return .{ .lo = value, .hi = value };
+    }
+    fn initMax(value: u16) Range {
+        return .{ .lo = 0, .hi = value };
+    }
+    fn initMin(value: u16) Range {
+        return .{ .lo = value, .hi = 0xffff };
     }
 
     fn clamp(self: Range, value: u16) u16 {
@@ -875,7 +906,7 @@ fn accumulateParentWidth(l: *Layout, width: Range) !void {
         },
         .hbox => |*b| {
             const gap = if (first_child) 0 else b.gap;
-            parent.w_range.accumulateSerial(b.spill, gap, width);
+            parent.w_range.accumulateSerial(parent.spec.spill, gap, width);
         },
         else => unreachable,
     }
@@ -913,6 +944,7 @@ pub fn box(self: *Layout, result: ?*Rect, options: BoxOptions) !void {
             .w = options.width,
             .h = options.height,
             .padding = options.padding,
+            .spill = options.spill,
         },
         .as = .box,
     };
@@ -936,11 +968,11 @@ pub fn beginHBox(self: *Layout, options: BoxOptions) !void {
                 .w = options.width,
                 .h = options.height,
                 .padding = options.padding,
+                .spill = options.spill,
             },
             .as = .{ .hbox = .{
                 .rendered_children = 0,
                 .render_empty = false,
-                .spill = options.spill,
                 .gap = options.gap,
             } },
         },
@@ -969,11 +1001,11 @@ pub fn beginVBox(self: *Layout, options: BoxOptions) !void {
                 .w = options.width,
                 .h = options.height,
                 .padding = options.padding,
+                .spill = options.spill,
             },
             .as = .{ .vbox = .{
                 .rendered_children = 0,
                 .render_empty = false,
-                .spill = options.spill,
                 .gap = options.gap,
             } },
         },
@@ -1018,6 +1050,7 @@ const TextOptions = struct {
     gap: u16 = 5,
     fg: Color = .black,
     bg: Color = .transparent,
+    spill: bool = false,
     result: ?*Rect = null,
 };
 
@@ -1040,6 +1073,7 @@ pub fn text(self: *Layout, font: u16, string: []const u8, options: TextOptions) 
             .w = options.width,
             .h = options.height,
             .padding = options.padding,
+            .spill = options.spill,
         },
         .result = options.result,
         .as = .{ .text = .{
