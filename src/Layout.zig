@@ -45,6 +45,15 @@ pub const Rect = struct {
         return self.x <= x and self.y <= y and x <= self.x + self.w and y <= self.y + self.h;
     }
 };
+
+pub const Result = struct {
+    rect: Rect,
+    instruction: usize,
+    rendered: bool,
+
+    pub const init = Result{ .rect = .zero, .instruction = 0, .rendered = false };
+};
+
 pub const Color = struct {
     r: u8,
     g: u8,
@@ -217,7 +226,7 @@ const Element = struct {
     w_range: Range = .any,
     h_range: Range = .any,
     render: bool = true,
-    result: ?*Rect,
+    result: ?*Result,
 
     spec: struct {
         w: Spec,
@@ -329,9 +338,7 @@ fn resolvePositions(l: *Layout, id: usize, x: u16, y: u16) void {
 
     e.x = x;
     e.y = y;
-    if (e.result) |result| {
-        result.* = .{ .x = e.x, .y = e.y, .w = e.w, .h = e.h };
-    }
+
     switch (e.as) {
         .hbox => |b| {
             var child_x = x + e.spec.padding.left;
@@ -745,6 +752,14 @@ fn createInstructions(l: *Layout) ![]const Instruction {
                 },
             };
 
+            if (e.result) |result| {
+                result.* = .{
+                    .rendered = true,
+                    .instruction = l.instructions.items.len,
+                    .rect = .{ .x = e.x, .y = e.y, .w = e.w, .h = e.h },
+                };
+            }
+
             try l.instructions.append(l.allocator, instruction);
         } else {
             i += e.next;
@@ -888,7 +903,7 @@ const BoxOptions = struct {
     spill: bool = false,
     fg: Color = .black,
     bg: Color = .white,
-    result: ?*Rect = null,
+    result: ?*Result = null,
 };
 
 fn getParent(l: *Layout) ?*Element {
@@ -932,11 +947,11 @@ fn incrementParent(self: *Layout, n: u32) void {
     if (self.getParent()) |parent| parent.next += n;
 }
 
-pub fn box(self: *Layout, result: ?*Rect, options: BoxOptions) !void {
+pub fn box(self: *Layout, options: BoxOptions) !void {
     const element = Element{
         .w = options.width.r.lo,
         .w_range = options.width.r,
-        .result = result,
+        .result = options.result,
         .spec = .{
             .frame_width = 1,
             .fg = options.fg,
@@ -1051,7 +1066,7 @@ const TextOptions = struct {
     fg: Color = .black,
     bg: Color = .transparent,
     spill: bool = false,
-    result: ?*Rect = null,
+    result: ?*Result = null,
 };
 
 /// Draw text.

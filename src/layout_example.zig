@@ -29,9 +29,9 @@ const GuiState = struct {
     left_panel_width_max: f32,
 
     left_panel: Layout.Rect,
-    vertical_resize_bar: Layout.Rect,
-    main_panel: Layout.Rect,
-    bottom_panel: Layout.Rect,
+    vertical_resize_bar: Layout.Result,
+    main_panel: Layout.Result,
+    bottom_panel: Layout.Result,
 
     assets: GuiAssets,
 
@@ -60,9 +60,9 @@ const State = struct {
                 .left_panel_width_min = 100,
                 .left_panel_width_max = width / 2,
                 .left_panel = .zero,
-                .vertical_resize_bar = .zero,
-                .main_panel = .zero,
-                .bottom_panel = .zero,
+                .vertical_resize_bar = .init,
+                .main_panel = .init,
+                .bottom_panel = .init,
 
                 .assets = .{
                     .default_cursor = assertSdl(c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_DEFAULT)),
@@ -95,7 +95,7 @@ fn handleGuiEvent(event: c.SDL_Event, state: *GuiState) bool {
                     const x: u16 = @intFromFloat(event.button.x);
                     const y: u16 = @intFromFloat(event.button.y);
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
-                        if (state.vertical_resize_bar.contains(x, y)) {
+                        if (state.vertical_resize_bar.rect.contains(x, y)) {
                             state.action = .resize_left_panel;
                             assertSdl(c.SDL_SetCursor(state.assets.ew_cursor));
                         }
@@ -112,7 +112,7 @@ fn handleGuiEvent(event: c.SDL_Event, state: *GuiState) bool {
                 c.SDL_EVENT_MOUSE_MOTION => {
                     const x: u16 = @intFromFloat(event.motion.x);
                     const y: u16 = @intFromFloat(event.motion.y);
-                    if (state.vertical_resize_bar.contains(x, y)) {
+                    if (state.vertical_resize_bar.rect.contains(x, y)) {
                         assertSdl(c.SDL_SetCursor(state.assets.ew_cursor));
                     } else {
                         assertSdl(c.SDL_SetCursor(state.assets.default_cursor));
@@ -205,19 +205,27 @@ fn doLayout(
                     .{ .height = .fit, .padding = .uniform(10) },
                 );
 
-                try layout.box(null, .{ .height = .fixed(100) });
-                try layout.box(null, .{ .height = .fixed(100) });
-                try layout.box(null, .{ .height = .fixed(100) });
-                try layout.box(null, .{ .height = .fixed(100) });
+                try layout.box(.{ .height = .fixed(100) });
+                try layout.box(.{ .height = .fixed(100) });
+                try layout.box(.{ .height = .fixed(100) });
+                try layout.box(.{ .height = .fixed(100) });
 
                 try layout.endVBox();
             }
-            try layout.box(&gui_state.vertical_resize_bar, .{ .width = .fixed(10), .bg = .white });
+            try layout.box(.{
+                .width = .fixed(10),
+                .bg = .white,
+                .result = &gui_state.vertical_resize_bar,
+            });
             try layout.beginVBox(.{ .bg = .white });
             try layout.text(0, lore_ipsum, .{ .padding = .uniform(10), .spill = true });
             try layout.endVBox();
 
-            try layout.box(&gui_state.main_panel, .{ .bg = .green, .width = .max(400) });
+            try layout.box(.{
+                .bg = .green,
+                .width = .max(400),
+                .result = &gui_state.main_panel,
+            });
 
             try layout.endHBox();
         }
