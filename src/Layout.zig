@@ -390,7 +390,6 @@ fn resizeWidthsHBox(
         const child, const child_id = pair;
         child.w = child.w_range.lo;
         if (required + child.w_range.lo <= width) {
-            child.w = child.w;
             required += child.w;
             last_child_id = child_id;
             hbox.rendered_children += 1;
