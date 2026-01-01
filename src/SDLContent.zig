@@ -14,14 +14,14 @@ pub const Color = struct {
     r: u8,
     g: u8,
     b: u8,
-    a: u8,
+    a: u8 = 255,
 
-    pub const black = Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
-    pub const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
-    pub const red = Color{ .r = 255, .g = 0, .b = 0, .a = 255 };
-    pub const green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
-    pub const blue = Color{ .r = 0, .g = 0, .b = 255, .a = 255 };
-    pub const grey = Color{ .r = 100, .g = 100, .b = 100, .a = 255 };
+    pub const black = Color{ .r = 0, .g = 0, .b = 0 };
+    pub const white = Color{ .r = 255, .g = 255, .b = 255 };
+    pub const red = Color{ .r = 255, .g = 0, .b = 0 };
+    pub const green = Color{ .r = 0, .g = 255, .b = 0 };
+    pub const blue = Color{ .r = 0, .g = 0, .b = 255 };
+    pub const grey = Color{ .r = 100, .g = 100, .b = 100 };
     pub const transparent = Color{ .r = 0, .g = 0, .b = 0, .a = 0 };
 
     pub fn toSdl(self: Color) c.SDL_Color {
