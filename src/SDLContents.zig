@@ -1,38 +1,15 @@
 const Layout = @import("layout").Layout;
 const ContentId = Layout.ContentId;
 
-pub const c = @cImport({
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3_ttf/SDL_ttf.h");
-});
+const utils = @import("sdl_utils.zig");
+const assertSdl = utils.assertSdl;
+const Color = utils.Color;
+
+const c = @import("sdl_import.zig").c;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-
-pub const Color = struct {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8 = 255,
-
-    pub const black = Color{ .r = 0, .g = 0, .b = 0 };
-    pub const white = Color{ .r = 255, .g = 255, .b = 255 };
-    pub const red = Color{ .r = 255, .g = 0, .b = 0 };
-    pub const green = Color{ .r = 0, .g = 255, .b = 0 };
-    pub const blue = Color{ .r = 0, .g = 0, .b = 255 };
-    pub const grey = Color{ .r = 100, .g = 100, .b = 100 };
-    pub const transparent = Color{ .r = 0, .g = 0, .b = 0, .a = 0 };
-
-    pub fn toSdl(self: Color) c.SDL_Color {
-        return .{
-            .r = self.r,
-            .g = self.g,
-            .b = self.b,
-            .a = self.a,
-        };
-    }
-};
 
 pub const FontId = enum(u16) {
     body,
@@ -42,47 +19,6 @@ pub const FontId = enum(u16) {
     user_begin,
     user_end = 0xffff,
 };
-
-fn Assert(comptime Type: type) type {
-    const info = @typeInfo(Type);
-    switch (info) {
-        .optional => |optional| {
-            const child_info = @typeInfo(optional.child);
-            switch (child_info) {
-                .pointer => {
-                    return optional.child;
-                },
-                else => @compileError("Only optional errors allowed"),
-            }
-        },
-        .pointer => |pointer| {
-            if (pointer.size == .c) {
-                return *pointer.child;
-            } else {
-                @compileError("Invalid Type");
-            }
-        },
-        .bool => return void,
-        else => @compileError("Invalid Type"),
-    }
-}
-
-pub fn assertSdl(value: anytype) Assert(@TypeOf(value)) {
-    const Type = Assert(@TypeOf(value));
-    if (Type == void) {
-        if (!value) {
-            std.log.err("SDL Error: {s}", .{c.SDL_GetError()});
-            @panic("");
-        }
-    } else {
-        if (value) |v| {
-            return v;
-        } else {
-            std.log.err("SDL Error: {s}", .{c.SDL_GetError()});
-            @panic("");
-        }
-    }
-}
 
 pub const TextureMode = enum {
     strict,
@@ -114,7 +50,7 @@ pub const Content = union(enum) {
     }
 };
 
-const SDLContent = @This();
+const SDLContents = @This();
 
 allocator: Allocator,
 contents: ArrayList(Content),
@@ -122,7 +58,7 @@ fonts: ArrayList(?*c.TTF_Font),
 text_engine: *c.TTF_TextEngine,
 renderer: *c.SDL_Renderer,
 
-pub fn init(allocator: Allocator, renderer: *c.SDL_Renderer) !SDLContent {
+pub fn init(allocator: Allocator, renderer: *c.SDL_Renderer) !SDLContents {
     const text_engine = c.TTF_CreateRendererTextEngine(renderer) orelse {
         std.log.err("Failed to create text engine: {s}", .{c.SDL_GetError()});
         return error.SDLError;
@@ -144,14 +80,14 @@ pub fn init(allocator: Allocator, renderer: *c.SDL_Renderer) !SDLContent {
     };
 }
 
-pub fn deinit(self: *SDLContent) void {
+pub fn deinit(self: *SDLContents) void {
     self.fonts.deinit(self.allocator);
     self.clear();
     self.contents.deinit(self.allocator);
     c.TTF_DestroyRendererTextEngine(self.text_engine);
 }
 
-pub fn setFont(self: *SDLContent, id: FontId, font: *c.TTF_Font) !void {
+pub fn setFont(self: *SDLContents, id: FontId, font: *c.TTF_Font) !void {
     const i: usize = @intFromEnum(id);
     const old_len = self.fonts.items.len;
     if (i >= old_len) {
@@ -161,20 +97,20 @@ pub fn setFont(self: *SDLContent, id: FontId, font: *c.TTF_Font) !void {
     self.fonts.items[i] = font;
 }
 
-pub fn getFont(self: *SDLContent, id: FontId) ?*c.TTF_Font {
+pub fn getFont(self: *SDLContents, id: FontId) ?*c.TTF_Font {
     const i: usize = @intFromEnum(id);
     if (i >= self.fonts.items.len) return null;
     return self.fonts.items[i];
 }
 
 /// Does not take ownership!
-pub fn addFont(self: *SDLContent, font: *c.TTF_Font) !FontId {
+pub fn addFont(self: *SDLContents, font: *c.TTF_Font) !FontId {
     const i = self.fonts.items.len;
     try self.fonts.append(self.allocator, font);
     return @enumFromInt(i);
 }
 
-pub fn clear(self: *SDLContent) void {
+pub fn clear(self: *SDLContents) void {
     for (self.contents.items) |content| content.deinit();
     self.contents.clearRetainingCapacity();
 }
@@ -185,7 +121,7 @@ pub const RectangleOptions = struct {
     frame_width: u16 = 0,
 };
 
-pub fn rectangle(self: *SDLContent, options: RectangleOptions) !Layout.Content {
+pub fn rectangle(self: *SDLContents, options: RectangleOptions) !Layout.Content {
     const index = self.contents.items.len;
 
     try self.contents.append(self.allocator, .{ .rect = .{
@@ -203,7 +139,7 @@ pub const TextOptions = struct {
     wrap: bool = true,
 };
 
-pub fn text(self: *SDLContent, str: []const u8, options: TextOptions) !Layout.Content {
+pub fn text(self: *SDLContents, str: []const u8, options: TextOptions) !Layout.Content {
     const index = self.contents.items.len;
 
     const ptr = if (str.len > 0) str.ptr else null;
@@ -251,8 +187,11 @@ const TextureOptions = struct {
     mode: TextureMode = .strict,
 };
 
-pub fn texture(self: *SDLContent, t: *c.SDL_Texture, options: TextureOptions) !Layout.Content {
-    std.log.info("texture size: {} {}", .{ t.w, t.h });
+pub fn texture(
+    self: *SDLContents,
+    t: *c.SDL_Texture,
+    options: TextureOptions,
+) !Layout.Content {
     const index = self.contents.items.len;
     try self.contents.append(self.allocator, .{ .texture = .{
         .bg = t,
@@ -275,7 +214,7 @@ pub fn texture(self: *SDLContent, t: *c.SDL_Texture, options: TextureOptions) !L
     };
 }
 
-pub fn clone(self: *SDLContent, content: Layout.Content) !Layout.Content {
+pub fn clone(self: *SDLContents, content: Layout.Content) !Layout.Content {
     const original = self.contents.items[content.index];
     const new_index = self.contents.items.len;
 
@@ -303,7 +242,7 @@ pub fn clone(self: *SDLContent, content: Layout.Content) !Layout.Content {
     return res;
 }
 
-pub fn wrap(self: *SDLContent, id: ContentId, width: u16) u16 {
+pub fn wrap(self: *SDLContents, id: ContentId, width: u16) u16 {
     const content = self.contents.items[id];
     switch (content) {
         .text => |t| {
@@ -317,7 +256,7 @@ pub fn wrap(self: *SDLContent, id: ContentId, width: u16) u16 {
     }
 }
 
-pub fn drawInstruction(self: *SDLContent, instr: Layout.Instruction) !void {
+pub fn drawInstruction(self: *SDLContents, instr: Layout.Instruction) !void {
     const content = self.contents.items[instr.content];
     switch (content) {
         .rect => |r| {
@@ -411,7 +350,7 @@ pub fn drawInstruction(self: *SDLContent, instr: Layout.Instruction) !void {
 }
 
 pub fn drawInstructions(
-    self: *SDLContent,
+    self: *SDLContents,
     instructions: []const Layout.Instruction,
 ) !void {
     for (instructions) |instruction| try self.drawInstruction(instruction);

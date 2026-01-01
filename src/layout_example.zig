@@ -1,7 +1,7 @@
 const std = @import("std");
 const Layout = @import("layout").Layout;
 const layout_sdl = @import("layout_sdl");
-const SDLContent = layout_sdl.SDLContent;
+const SDLContents = layout_sdl.SDLContents;
 const c = layout_sdl.c;
 const assertSdl = layout_sdl.assertSdl;
 
@@ -182,7 +182,7 @@ fn handleEvent(
 
 fn doLayout(
     layout: *Layout,
-    content: *SDLContent,
+    content: *SDLContents,
     gui_state: *GuiState,
     width: u16,
     height: u16,
@@ -281,7 +281,7 @@ fn doLayout(
         try layout.endVertical();
     }
 
-    const res = try layout.end(content, SDLContent.wrap);
+    const res = try layout.end(content, SDLContents.wrap);
     for (res) |r| {
         if (r.content == vertical_bar.index) {
             gui_state.vertical_resize_bar = .{
@@ -332,7 +332,7 @@ pub fn main() !void {
     ));
     defer c.TTF_CloseFont(h1_font);
 
-    var content = try SDLContent.init(allocator, renderer);
+    var content = try SDLContents.init(allocator, renderer);
     defer content.deinit();
 
     try content.setFont(.body, body_font);
@@ -352,7 +352,6 @@ pub fn main() !void {
     defer c.SDL_DestroySurface(surface);
     const texture = assertSdl(c.SDL_CreateTextureFromSurface(renderer, surface));
     defer c.SDL_DestroyTexture(texture);
-    std.log.info("texture size {} {}", .{ texture.w, texture.h });
 
     var event: c.SDL_Event = undefined;
     while (c.SDL_WaitEvent(&event)) {
