@@ -236,19 +236,25 @@ fn doLayout(
             }
             try layout.box(vertical_bar, .{ .width = .fixed(10) });
 
-            try layout.beginVBox(white, .{ .padding = .uniform(10) });
+            try layout.beginVBox(white, .{ .padding = .uniform(10), .gap = 10, .spill = true });
             try layout.box(try content.text(lore_ipsum, .{}), .{
-                .padding = .uniform(10),
-                .spill = true,
                 .height = .fit,
             });
             try layout.box(try content.text(lore_ipsum, .{}), .{
-                .padding = .uniform(10),
                 .spill = true,
+                .height = .fit,
             });
             try layout.endVBox();
 
-            try layout.box(green, .{ .width = .max(400) });
+            try layout.beginVBox(green, .{ .width = .max(400), .padding = .uniform(10) });
+            try layout.beginVBox(transparent, .{ .padding = .uniform(10), .height = .fit });
+            try layout.box(try content.text(lore_ipsum, .{}), .{
+                .spill = true,
+                .height = .fit,
+            });
+            try layout.endVBox();
+            try layout.box(transparent, .{});
+            try layout.endVBox();
 
             try layout.endHBox();
         }
@@ -267,7 +273,7 @@ fn doLayout(
 
                 try layout.beginHBox(grey, .{ .width = .fit, .height = .fit, .padding = .uniform(10) });
                 try layout.box(try content.text(label, .{ .wrap = false, .font = .h1 }), .{
-                    .width = .any,
+                    .width = .fit,
                     .height = .fit,
                     .padding = .uniform(10),
                 });

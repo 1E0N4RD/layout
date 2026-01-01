@@ -182,7 +182,7 @@ pub fn rectangle(self: *SDLContent, options: RectangleOptions) !Layout.Content {
 
     try self.contents.append(self.allocator, .{ .rect = .{
         .fg = options.frame_color,
-        .bg = options.background,
+        .bg = if (options.background.a != 0) options.background else null,
         .frame_width = options.frame_width,
     } });
 

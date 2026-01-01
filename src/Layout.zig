@@ -668,7 +668,7 @@ pub fn box(self: *Layout, content: Content, options: BoxOptions) !void {
             .spill = options.spill,
         },
         .wrap = content.wrap,
-        .direction = .vertical,
+        .direction = .terminal,
     };
     try self.elements.append(self.allocator, element);
 
