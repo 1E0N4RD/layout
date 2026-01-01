@@ -1,10 +1,12 @@
 const std = @import("std");
 const Layout = @import("layout").Layout;
 const layout_sdl = @import("layout_sdl");
+const SDLContent = layout_sdl.SDLContent;
 const c = layout_sdl.c;
 const assertSdl = layout_sdl.assertSdl;
 
 const cantarell_bold = @embedFile("assets/Cantarell-Bold.ttf");
+const cantarell_regular = @embedFile("assets/Cantarell-Regular.ttf");
 
 const lore_ipsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
@@ -79,7 +81,7 @@ fn refresh(allocator: std.mem.Allocator) !void {
     switch (term) {
         .Exited => |v| {
             if (v == 0) {
-                const argv = [3:null]?[*:0]const u8{ "zig", "build", "ask_sail" };
+                const argv = [3:null]?[*:0]const u8{ "zig", "build", "run" };
                 std.posix.execvpeZ("zig", &argv, std.c.environ) catch unreachable;
             }
         },
@@ -179,61 +181,81 @@ fn handleEvent(
 
 fn doLayout(
     layout: *Layout,
+    content: *SDLContent,
     gui_state: *GuiState,
     width: u16,
     height: u16,
 ) ![]const Layout.Instruction {
     layout.begin(@intCast(width), @intCast(height));
+    content.clear();
+
+    const green = try content.rectangle(.{
+        .frame_width = 4,
+        .background = .green,
+    });
+    const white = try content.rectangle(.{
+        .background = .white,
+        .frame_width = 4,
+    });
+    const vertical_bar = try content.clone(white);
+    const transparent = try content.rectangle(.{
+        .frame_width = 4,
+    });
+    const grey = try content.rectangle(.{
+        .frame_color = .black,
+        .frame_width = 4,
+        .background = .grey,
+    });
+    const blue = try content.rectangle(.{
+        .frame_width = 4,
+        .background = .blue,
+    });
 
     {
-        try layout.beginVBox(.{ .bg = .white, .gap = 5 });
+        try layout.beginVBox(white, .{ .gap = 5 });
 
         {
-            try layout.beginHBox(.{});
+            try layout.beginHBox(transparent, .{});
 
             {
-                try layout.beginVBox(.{
+                try layout.beginVBox(grey, .{
                     .width = .fixed(@intFromFloat(gui_state.left_panel_width)),
-                    .bg = .grey,
                     .spill = true,
                 });
 
-                try layout.textBox(
-                    0,
-                    "Start",
-                    .{},
-                    .{ .height = .fit, .padding = .uniform(10) },
-                );
+                try layout.beginVBox(white, .{ .padding = .uniform(10), .height = .fixed(100) });
+                try layout.box(try content.text("Start", .{ .font = .h1 }), .{});
+                try layout.endVBox();
 
-                try layout.box(.{ .height = .fixed(100) });
-                try layout.box(.{ .height = .fixed(100) });
-                try layout.box(.{ .height = .fixed(100) });
-                try layout.box(.{ .height = .fixed(100) });
+                try layout.box(white, .{ .height = .fixed(100) });
+                try layout.box(white, .{ .height = .fixed(100) });
+                try layout.box(white, .{ .height = .fixed(100) });
+                try layout.box(white, .{ .height = .fixed(100) });
 
                 try layout.endVBox();
             }
-            try layout.box(.{
-                .width = .fixed(10),
-                .bg = .white,
-                .result = &gui_state.vertical_resize_bar,
+            try layout.box(vertical_bar, .{ .width = .fixed(10) });
+
+            try layout.beginVBox(white, .{ .padding = .uniform(10) });
+            try layout.box(try content.text(lore_ipsum, .{}), .{
+                .padding = .uniform(10),
+                .spill = true,
+                .height = .fit,
             });
-            try layout.beginVBox(.{ .bg = .white });
-            try layout.text(0, lore_ipsum, .{ .padding = .uniform(10), .spill = true });
+            try layout.box(try content.text(lore_ipsum, .{}), .{
+                .padding = .uniform(10),
+                .spill = true,
+            });
             try layout.endVBox();
 
-            try layout.box(.{
-                .bg = .green,
-                .width = .max(400),
-                .result = &gui_state.main_panel,
-            });
+            try layout.box(green, .{ .width = .max(400) });
 
             try layout.endHBox();
         }
 
         {
-            try layout.beginHBox(.{
+            try layout.beginHBox(blue, .{
                 .height = .fit,
-                .bg = .blue,
                 .padding = .uniform(5),
                 .gap = 5,
                 .spill = true,
@@ -243,11 +265,13 @@ fn doLayout(
                 var buf: [4]u8 = undefined;
                 const label = try std.fmt.bufPrint(&buf, "{:0>4}", .{i});
 
-                try layout.beginVBox(
-                    .{ .width = .any, .height = .fit, .padding = .uniform(10) },
-                );
-                try layout.text(0, label, .{});
-                try layout.endVBox();
+                try layout.beginHBox(grey, .{ .width = .fit, .height = .fit, .padding = .uniform(10) });
+                try layout.box(try content.text(label, .{ .wrap = false, .font = .h1 }), .{
+                    .width = .any,
+                    .height = .fit,
+                    .padding = .uniform(10),
+                });
+                try layout.endHBox();
             }
 
             try layout.endHBox();
@@ -256,7 +280,18 @@ fn doLayout(
         try layout.endVBox();
     }
 
-    return layout.end();
+    const res = try layout.end(content, SDLContent.wrap);
+    for (res) |r| {
+        if (r.content == vertical_bar.index) {
+            gui_state.vertical_resize_bar.rect = .{
+                .x = r.x,
+                .y = r.y,
+                .w = r.w,
+                .h = r.h,
+            };
+        }
+    }
+    return res;
 }
 
 pub fn main() !void {
@@ -282,16 +317,27 @@ pub fn main() !void {
 
     const text_engine = assertSdl(c.TTF_CreateRendererTextEngine(renderer));
     defer c.TTF_DestroyRendererTextEngine(text_engine);
-    const font = assertSdl(c.TTF_OpenFontIO(
-        assertSdl(c.SDL_IOFromConstMem(cantarell_bold.ptr, cantarell_bold.len)),
+
+    const body_font = assertSdl(c.TTF_OpenFontIO(
+        assertSdl(c.SDL_IOFromConstMem(cantarell_regular.ptr, cantarell_regular.len)),
         true,
         18,
     ));
-    defer c.TTF_CloseFont(font);
+    defer c.TTF_CloseFont(body_font);
+    const h1_font = assertSdl(c.TTF_OpenFontIO(
+        assertSdl(c.SDL_IOFromConstMem(cantarell_bold.ptr, cantarell_bold.len)),
+        true,
+        24,
+    ));
+    defer c.TTF_CloseFont(h1_font);
 
-    var text_measure = layout_sdl.TTFTextMeasure.init(&.{font});
+    var content = try SDLContent.init(allocator, renderer);
+    defer content.deinit();
 
-    var layout = Layout.init(allocator, text_measure.textMeasure());
+    try content.setFont(.body, body_font);
+    try content.setFont(.h1, h1_font);
+
+    var layout = Layout.init(allocator);
     defer layout.deinit();
 
     var state = State.init(1500, 1000);
@@ -312,12 +358,13 @@ pub fn main() !void {
 
             const instructions = try doLayout(
                 &layout,
+                &content,
                 &state.gui_state,
                 @intCast(width),
                 @intCast(height),
             );
 
-            layout_sdl.drawInstructions(renderer, text_engine, &.{font}, instructions);
+            try content.drawInstructions(instructions);
 
             assertSdl(c.SDL_RenderPresent(renderer));
         }
