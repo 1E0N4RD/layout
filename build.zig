@@ -33,6 +33,7 @@ pub fn build(b: *std.Build) void {
     const example_exe = b.addExecutable(.{
         .name = "layout-example",
         .root_module = layout_example_mod,
+        .use_llvm = true, // Unfortunatly, this seems to be the only way to get useful debug symbols.
     });
     example_exe.linkSystemLibrary("SDL3");
     example_exe.linkSystemLibrary("SDL3_ttf");
