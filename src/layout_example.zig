@@ -31,9 +31,9 @@ const GuiState = struct {
     left_panel_width_max: f32,
 
     left_panel: Layout.Rect,
-    vertical_resize_bar: Layout.Result,
-    main_panel: Layout.Result,
-    bottom_panel: Layout.Result,
+    vertical_resize_bar: Layout.Rect,
+    main_panel: Layout.Rect,
+    bottom_panel: Layout.Rect,
 
     assets: GuiAssets,
 
@@ -62,9 +62,9 @@ const State = struct {
                 .left_panel_width_min = 100,
                 .left_panel_width_max = width / 2,
                 .left_panel = .zero,
-                .vertical_resize_bar = .init,
-                .main_panel = .init,
-                .bottom_panel = .init,
+                .vertical_resize_bar = .zero,
+                .main_panel = .zero,
+                .bottom_panel = .zero,
 
                 .assets = .{
                     .default_cursor = assertSdl(c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_DEFAULT)),
@@ -97,7 +97,7 @@ fn handleGuiEvent(event: c.SDL_Event, state: *GuiState) bool {
                     const x: u16 = @intFromFloat(event.button.x);
                     const y: u16 = @intFromFloat(event.button.y);
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
-                        if (state.vertical_resize_bar.rect.contains(x, y)) {
+                        if (state.vertical_resize_bar.contains(x, y)) {
                             state.action = .resize_left_panel;
                             assertSdl(c.SDL_SetCursor(state.assets.ew_cursor));
                         }
@@ -114,7 +114,7 @@ fn handleGuiEvent(event: c.SDL_Event, state: *GuiState) bool {
                 c.SDL_EVENT_MOUSE_MOTION => {
                     const x: u16 = @intFromFloat(event.motion.x);
                     const y: u16 = @intFromFloat(event.motion.y);
-                    if (state.vertical_resize_bar.rect.contains(x, y)) {
+                    if (state.vertical_resize_bar.contains(x, y)) {
                         assertSdl(c.SDL_SetCursor(state.assets.ew_cursor));
                     } else {
                         assertSdl(c.SDL_SetCursor(state.assets.default_cursor));
@@ -283,7 +283,7 @@ fn doLayout(
     const res = try layout.end(content, SDLContent.wrap);
     for (res) |r| {
         if (r.content == vertical_bar.index) {
-            gui_state.vertical_resize_bar.rect = .{
+            gui_state.vertical_resize_bar = .{
                 .x = r.x,
                 .y = r.y,
                 .w = r.w,

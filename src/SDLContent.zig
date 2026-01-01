@@ -83,21 +83,6 @@ pub fn assertSdl(value: anytype) Assert(@TypeOf(value)) {
         }
     }
 }
-pub const TTFTextMeasure = struct {
-    /// Not owning
-    fonts: []const *c.TTF_Font,
-
-    pub fn init(fonts: []const *c.TTF_Font) TTFTextMeasure {
-        return .{ .fonts = fonts };
-    }
-    pub fn textMeasure(self: *TTFTextMeasure) Layout.TextMeasure {
-        return .{
-            .context = @ptrCast(self),
-            .measure_codepoint = &measureCodepoint,
-            .measure_wrapped_height = &measureWrappedHeight,
-        };
-    }
-};
 
 pub const Content = union(enum) {
     rect: struct {
@@ -120,38 +105,6 @@ pub const Content = union(enum) {
         }
     }
 };
-
-fn measureCodepoint(context: *anyopaque, font_id: u16, char: u21) u16 {
-    const measure: *TTFTextMeasure = @ptrCast(@alignCast(context));
-    var advance: c_int = undefined;
-    _ = c.TTF_GetGlyphMetrics(measure.fonts[font_id], char, null, null, null, null, &advance);
-    return @intCast(advance);
-}
-
-fn measureWrappedHeight(context: *anyopaque, font_id: u16, string: []const u8, width: u16) u16 {
-    const measure: *TTFTextMeasure = @ptrCast(@alignCast(context));
-    var height: c_int = undefined;
-    _ = c.TTF_GetStringSizeWrapped(measure.fonts[font_id], string.ptr, string.len, width, null, &height);
-    return @intCast(height);
-}
-
-fn drawRect(instr: Layout.RectInstruction, renderer: *c.SDL_Renderer) void {
-    var rect = c.SDL_FRect{
-        .x = @floatFromInt(instr.x),
-        .y = @floatFromInt(instr.y),
-        .w = @floatFromInt(instr.w),
-        .h = @floatFromInt(instr.h),
-    };
-
-    if (instr.bg.a != 0) {
-        assertSdl(c.SDL_SetRenderDrawColor(renderer, instr.bg.r, instr.bg.g, instr.bg.b, instr.bg.a));
-        assertSdl(c.SDL_RenderFillRect(renderer, &rect));
-    }
-    if (instr.frame_width != 0) {
-        assertSdl(c.SDL_SetRenderDrawColor(renderer, instr.fg.r, instr.fg.g, instr.fg.b, instr.fg.a));
-        assertSdl(c.SDL_RenderRect(renderer, &rect));
-    }
-}
 
 const SDLContent = @This();
 
