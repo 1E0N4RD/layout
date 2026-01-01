@@ -7,7 +7,6 @@ const assertSdl = layout_sdl.assertSdl;
 
 const cantarell_bold = @embedFile("assets/Cantarell-Bold.ttf");
 const cantarell_regular = @embedFile("assets/Cantarell-Regular.ttf");
-const example_image = @embedFile("assets/example-image.bmp");
 
 const lore_ipsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
@@ -343,14 +342,7 @@ pub fn main() !void {
 
     var state = State.init(1500, 1000);
 
-    const surface = assertSdl(
-        c.SDL_LoadBMP_IO(c.SDL_IOFromConstMem(
-            example_image.ptr,
-            example_image.len,
-        ), true),
-    );
-    defer c.SDL_DestroySurface(surface);
-    const texture = assertSdl(c.SDL_CreateTextureFromSurface(renderer, surface));
+    const texture = try layout_sdl.staticBMPTexture(renderer, "./assets/example-image.bmp");
     defer c.SDL_DestroyTexture(texture);
 
     var event: c.SDL_Event = undefined;
