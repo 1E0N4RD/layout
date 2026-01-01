@@ -84,6 +84,13 @@ pub fn assertSdl(value: anytype) Assert(@TypeOf(value)) {
     }
 }
 
+pub const TextureMode = enum {
+    strict,
+    crop,
+    scale,
+    stretch,
+};
+
 pub const Content = union(enum) {
     rect: struct {
         bg: ?Color,
@@ -93,15 +100,16 @@ pub const Content = union(enum) {
     text: *c.TTF_Text,
     texture: struct {
         bg: *c.SDL_Texture,
-        fg: ?Color,
+        fg: Color,
         frame_width: u16,
+        mode: TextureMode,
     },
 
     pub fn deinit(self: Content) void {
         switch (self) {
             .rect => {},
             .text => |t| c.TTF_DestroyText(t),
-            .texture => |t| c.SDL_DestroyTexture(t.bg),
+            .texture => {},
         }
     }
 };
@@ -236,6 +244,37 @@ pub fn text(self: *SDLContent, str: []const u8, options: TextOptions) !Layout.Co
         .wrap = options.wrap,
     };
 }
+
+const TextureOptions = struct {
+    frame_color: Color = .black,
+    frame_width: u16 = 0,
+    mode: TextureMode = .strict,
+};
+
+pub fn texture(self: *SDLContent, t: *c.SDL_Texture, options: TextureOptions) !Layout.Content {
+    std.log.info("texture size: {} {}", .{ t.w, t.h });
+    const index = self.contents.items.len;
+    try self.contents.append(self.allocator, .{ .texture = .{
+        .bg = t,
+        .fg = options.frame_color,
+        .frame_width = options.frame_width,
+        .mode = options.mode,
+    } });
+    return .{
+        .index = @intCast(index),
+        .w_range = switch (options.mode) {
+            .strict => .initExact(@intCast(t.w)),
+            .crop => .initMax(@intCast(t.w)),
+            else => .any,
+        },
+        .h_range = switch (options.mode) {
+            .strict => .initExact(@intCast(t.h)),
+            .crop => .initMax(@intCast(t.h)),
+            else => .any,
+        },
+    };
+}
+
 pub fn clone(self: *SDLContent, content: Layout.Content) !Layout.Content {
     const original = self.contents.items[content.index];
     const new_index = self.contents.items.len;
@@ -328,8 +367,45 @@ pub fn drawInstruction(self: *SDLContent, instr: Layout.Instruction) !void {
             }
         },
         .texture => |t| {
-            _ = t;
-            unreachable;
+            const src = switch (t.mode) {
+                .stretch => c.SDL_FRect{
+                    .w = @floatFromInt(t.bg.w),
+                    .h = @floatFromInt(t.bg.h),
+                },
+                .strict, .crop => c.SDL_FRect{
+                    .w = @floatFromInt(instr.w),
+                    .h = @floatFromInt(instr.h),
+                },
+                .scale => unreachable,
+            };
+
+            const dest = switch (t.mode) {
+                .stretch, .crop, .strict => c.SDL_FRect{
+                    .x = @floatFromInt(instr.x),
+                    .y = @floatFromInt(instr.y),
+                    .w = @floatFromInt(instr.w),
+                    .h = @floatFromInt(instr.h),
+                },
+                .scale => unreachable,
+            };
+            assertSdl(c.SDL_RenderTexture(self.renderer, t.bg, &src, &dest));
+
+            if (t.frame_width != 0) {
+                const rect = c.SDL_FRect{
+                    .x = @floatFromInt(instr.x),
+                    .y = @floatFromInt(instr.y),
+                    .w = @floatFromInt(instr.w),
+                    .h = @floatFromInt(instr.h),
+                };
+                assertSdl(c.SDL_SetRenderDrawColor(
+                    self.renderer,
+                    t.fg.r,
+                    t.fg.g,
+                    t.fg.b,
+                    t.fg.a,
+                ));
+                assertSdl(c.SDL_RenderRect(self.renderer, &rect));
+            }
         },
     }
 }

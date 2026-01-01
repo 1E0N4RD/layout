@@ -7,6 +7,7 @@ const assertSdl = layout_sdl.assertSdl;
 
 const cantarell_bold = @embedFile("assets/Cantarell-Bold.ttf");
 const cantarell_regular = @embedFile("assets/Cantarell-Regular.ttf");
+const example_image = @embedFile("assets/example-image.bmp");
 
 const lore_ipsum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
@@ -185,6 +186,7 @@ fn doLayout(
     gui_state: *GuiState,
     width: u16,
     height: u16,
+    texture: *c.SDL_Texture,
 ) ![]const Layout.Instruction {
     layout.begin(@intCast(width), @intCast(height));
     content.clear();
@@ -210,6 +212,8 @@ fn doLayout(
         .frame_width = 4,
         .background = .blue,
     });
+
+    const image = try content.texture(texture, .{});
 
     {
         try layout.beginVertical(white, .{ .gap = 5 });
@@ -241,11 +245,11 @@ fn doLayout(
             try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
             try layout.endVertical();
 
-            try layout.beginVertical(green, .{ .width = .max(400), .padding = .uniform(10) });
+            try layout.beginVertical(green, .{ .width = .max(600), .padding = .uniform(10) });
             try layout.beginVertical(transparent, .{ .padding = .uniform(10), .height = .fit });
             try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
             try layout.endVertical();
-            try layout.box(transparent, .{});
+            try layout.box(image, .{});
             try layout.endVertical();
 
             try layout.endHorizontal();
@@ -339,6 +343,17 @@ pub fn main() !void {
 
     var state = State.init(1500, 1000);
 
+    const surface = assertSdl(
+        c.SDL_LoadBMP_IO(c.SDL_IOFromConstMem(
+            example_image.ptr,
+            example_image.len,
+        ), true),
+    );
+    defer c.SDL_DestroySurface(surface);
+    const texture = assertSdl(c.SDL_CreateTextureFromSurface(renderer, surface));
+    defer c.SDL_DestroyTexture(texture);
+    std.log.info("texture size {} {}", .{ texture.w, texture.h });
+
     var event: c.SDL_Event = undefined;
     while (c.SDL_WaitEvent(&event)) {
         const action = handleEvent(event, &state, allocator);
@@ -359,6 +374,7 @@ pub fn main() !void {
                 &state.gui_state,
                 @intCast(width),
                 @intCast(height),
+                texture,
             );
 
             try content.drawInstructions(instructions);

@@ -553,8 +553,8 @@ pub const Range = struct {
     lo: u16,
     hi: u16,
 
-    const any = Range{ .lo = 0, .hi = 0xffff };
-    const zero = Range{ .lo = 0, .hi = 0 };
+    pub const any = Range{ .lo = 0, .hi = 0xffff };
+    pub const zero = Range{ .lo = 0, .hi = 0 };
     const initParallel = any;
     const initSerial = zero;
 
