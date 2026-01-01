@@ -622,7 +622,7 @@ pub const Padding = struct {
     }
 };
 
-const BoxOptions = struct {
+const ContainerOptions = struct {
     width: Spec = .any,
     height: Spec = .any,
     padding: Padding = .none,
@@ -655,16 +655,22 @@ fn incrementTop(self: *Layout, n: u16) void {
     if (self.getTop()) |top| top.next += n;
 }
 
+const BoxOptions = struct {
+    width: Spec = .fit,
+    height: Spec = .fit,
+    spill: bool = false,
+};
+
 pub fn box(self: *Layout, content: Content, options: BoxOptions) !void {
     const element = Element{
         .w = options.width.r.lo,
         .w_range = options.width.r,
         .content = content.index,
         .spec = .{
-            .gap = options.gap,
+            .gap = 0,
             .w = options.width.intersect(content.w_range),
             .h = options.height.intersect(content.h_range),
-            .padding = options.padding,
+            .padding = .none,
             .spill = options.spill,
         },
         .wrap = content.wrap,
@@ -676,7 +682,7 @@ pub fn box(self: *Layout, content: Content, options: BoxOptions) !void {
     self.incrementTop(1);
 }
 
-pub fn beginHBox(self: *Layout, content: Content, options: BoxOptions) !void {
+pub fn beginHorizontal(self: *Layout, content: Content, options: ContainerOptions) !void {
     const id = self.elements.items.len;
     try self.elements.append(
         self.allocator,
@@ -698,13 +704,13 @@ pub fn beginHBox(self: *Layout, content: Content, options: BoxOptions) !void {
     try self.stack.append(self.allocator, @intCast(id));
 }
 
-pub fn endHBox(l: *Layout) !void {
+pub fn endHorizontal(l: *Layout) !void {
     const e = &l.elements.items[l.stack.getLast()];
     std.debug.assert(e.direction == .horizontal);
     try l.endElement(e);
 }
 
-pub fn beginVBox(self: *Layout, content: Content, options: BoxOptions) !void {
+pub fn beginVertical(self: *Layout, content: Content, options: ContainerOptions) !void {
     const id = self.elements.items.len;
     try self.elements.append(
         self.allocator,
@@ -726,7 +732,7 @@ pub fn beginVBox(self: *Layout, content: Content, options: BoxOptions) !void {
     try self.stack.append(self.allocator, @intCast(id));
 }
 
-pub fn endVBox(self: *Layout) !void {
+pub fn endVertical(self: *Layout) !void {
     const e = &self.elements.items[self.stack.getLast()];
     std.debug.assert(e.direction == .vertical);
     try self.endElement(e);

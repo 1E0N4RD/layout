@@ -212,55 +212,47 @@ fn doLayout(
     });
 
     {
-        try layout.beginVBox(white, .{ .gap = 5 });
+        try layout.beginVertical(white, .{ .gap = 5 });
 
         {
-            try layout.beginHBox(transparent, .{});
+            try layout.beginHorizontal(transparent, .{});
 
             {
-                try layout.beginVBox(grey, .{
+                try layout.beginVertical(grey, .{
                     .width = .fixed(@intFromFloat(gui_state.left_panel_width)),
                     .spill = true,
                 });
 
-                try layout.beginVBox(white, .{ .padding = .uniform(10), .height = .fixed(100) });
+                try layout.beginVertical(white, .{ .padding = .uniform(10), .height = .fixed(100) });
                 try layout.box(try content.text("Start", .{ .font = .h1 }), .{});
-                try layout.endVBox();
+                try layout.endVertical();
 
                 try layout.box(white, .{ .height = .fixed(100) });
                 try layout.box(white, .{ .height = .fixed(100) });
                 try layout.box(white, .{ .height = .fixed(100) });
                 try layout.box(white, .{ .height = .fixed(100) });
 
-                try layout.endVBox();
+                try layout.endVertical();
             }
             try layout.box(vertical_bar, .{ .width = .fixed(10) });
 
-            try layout.beginVBox(white, .{ .padding = .uniform(10), .gap = 10, .spill = true });
-            try layout.box(try content.text(lore_ipsum, .{}), .{
-                .height = .fit,
-            });
-            try layout.box(try content.text(lore_ipsum, .{}), .{
-                .spill = true,
-                .height = .fit,
-            });
-            try layout.endVBox();
+            try layout.beginVertical(white, .{ .padding = .uniform(10), .gap = 10, .spill = true });
+            try layout.box(try content.text(lore_ipsum, .{}), .{});
+            try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
+            try layout.endVertical();
 
-            try layout.beginVBox(green, .{ .width = .max(400), .padding = .uniform(10) });
-            try layout.beginVBox(transparent, .{ .padding = .uniform(10), .height = .fit });
-            try layout.box(try content.text(lore_ipsum, .{}), .{
-                .spill = true,
-                .height = .fit,
-            });
-            try layout.endVBox();
+            try layout.beginVertical(green, .{ .width = .max(400), .padding = .uniform(10) });
+            try layout.beginVertical(transparent, .{ .padding = .uniform(10), .height = .fit });
+            try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
+            try layout.endVertical();
             try layout.box(transparent, .{});
-            try layout.endVBox();
+            try layout.endVertical();
 
-            try layout.endHBox();
+            try layout.endHorizontal();
         }
 
         {
-            try layout.beginHBox(blue, .{
+            try layout.beginHorizontal(blue, .{
                 .height = .fit,
                 .padding = .uniform(5),
                 .gap = 5,
@@ -271,19 +263,18 @@ fn doLayout(
                 var buf: [4]u8 = undefined;
                 const label = try std.fmt.bufPrint(&buf, "{:0>4}", .{i});
 
-                try layout.beginHBox(grey, .{ .width = .fit, .height = .fit, .padding = .uniform(10) });
-                try layout.box(try content.text(label, .{ .wrap = false, .font = .h1 }), .{
-                    .width = .fit,
+                try layout.beginHorizontal(grey, .{
                     .height = .fit,
                     .padding = .uniform(10),
                 });
-                try layout.endHBox();
+                try layout.box(try content.text(label, .{ .wrap = false, .font = .h1 }), .{});
+                try layout.endHorizontal();
             }
 
-            try layout.endHBox();
+            try layout.endHorizontal();
         }
 
-        try layout.endVBox();
+        try layout.endVertical();
     }
 
     const res = try layout.end(content, SDLContent.wrap);
