@@ -212,7 +212,9 @@ fn doLayout(
         .background = .blue,
     });
 
-    const image = try content.texture(texture, .{});
+    const invisible = try content.rectangle(.{});
+
+    const image = try content.texture(texture, .{ .frame_width = 1, .mode = .strict });
 
     {
         try layout.beginVertical(white, .{ .gap = 5 });
@@ -242,12 +244,11 @@ fn doLayout(
             try layout.beginVertical(white, .{ .padding = .uniform(10), .gap = 10, .spill = true });
             try layout.box(try content.text(lore_ipsum, .{}), .{});
             try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
+            try layout.box(image, .{ .width = .fit, .height = .fit });
             try layout.endVertical();
 
-            try layout.beginVertical(green, .{ .width = .max(600), .padding = .uniform(10) });
-            try layout.beginVertical(transparent, .{ .padding = .uniform(10), .height = .fit });
+            try layout.beginVertical(green, .{ .width = .max(600), .padding = .uniform(10), .spill = true });
             try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
-            try layout.endVertical();
             try layout.box(image, .{});
             try layout.endVertical();
 
@@ -258,7 +259,7 @@ fn doLayout(
             try layout.beginHorizontal(blue, .{
                 .height = .fit,
                 .padding = .uniform(5),
-                .gap = 5,
+                .gap = 2,
                 .spill = true,
             });
 
@@ -272,6 +273,7 @@ fn doLayout(
                 });
                 try layout.box(try content.text(label, .{ .wrap = false, .font = .h1 }), .{});
                 try layout.endHorizontal();
+                try layout.box(invisible, .{});
             }
 
             try layout.endHorizontal();

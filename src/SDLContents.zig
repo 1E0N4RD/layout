@@ -306,24 +306,32 @@ pub fn drawInstruction(self: *SDLContents, instr: Layout.Instruction) !void {
             }
         },
         .texture => |t| {
+            const w: u16 = @intCast(t.bg.w);
+            const h: u16 = @intCast(t.bg.h);
             const src = switch (t.mode) {
                 .stretch => c.SDL_FRect{
-                    .w = @floatFromInt(t.bg.w),
-                    .h = @floatFromInt(t.bg.h),
+                    .w = @floatFromInt(w),
+                    .h = @floatFromInt(h),
                 },
                 .strict, .crop => c.SDL_FRect{
-                    .w = @floatFromInt(instr.w),
-                    .h = @floatFromInt(instr.h),
+                    .w = @floatFromInt(@min(instr.w, w)),
+                    .h = @floatFromInt(@min(instr.h, h)),
                 },
                 .scale => unreachable,
             };
 
             const dest = switch (t.mode) {
-                .stretch, .crop, .strict => c.SDL_FRect{
+                .stretch => c.SDL_FRect{
                     .x = @floatFromInt(instr.x),
                     .y = @floatFromInt(instr.y),
                     .w = @floatFromInt(instr.w),
                     .h = @floatFromInt(instr.h),
+                },
+                .crop, .strict => c.SDL_FRect{
+                    .x = @floatFromInt(instr.x),
+                    .y = @floatFromInt(instr.y),
+                    .w = @floatFromInt(@min(instr.w, w)),
+                    .h = @floatFromInt(@min(instr.h, h)),
                 },
                 .scale => unreachable,
             };

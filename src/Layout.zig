@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const ContentId = u16;
 
@@ -10,10 +11,12 @@ pub const Content = struct {
 };
 
 const Layout = @This();
+const trace_size = 32;
 
 allocator: std.mem.Allocator,
 elements: std.ArrayList(Element),
 stack: std.ArrayList(u16),
+stack_traces: if (builtin.mode == .Debug) std.ArrayList([trace_size]usize) else void,
 instructions: std.ArrayList(Instruction),
 
 width: u16,
@@ -25,6 +28,7 @@ pub fn init(allocator: std.mem.Allocator) Layout {
         .elements = .empty,
         .stack = .empty,
         .instructions = .empty,
+        .stack_traces = if (builtin.mode == .Debug) .empty else {},
 
         .width = 0,
         .height = 0,
@@ -32,9 +36,38 @@ pub fn init(allocator: std.mem.Allocator) Layout {
 }
 
 pub fn deinit(l: *Layout) void {
+    if (builtin.mode == .Debug) l.stack_traces.deinit(l.allocator);
     l.instructions.deinit(l.allocator);
     l.elements.deinit(l.allocator);
     l.stack.deinit(l.allocator);
+}
+
+fn pushTrace(l: *Layout) !void {
+    if (builtin.mode == .Debug) {
+        const addresses = try l.stack_traces.addOne(l.allocator);
+        @memset(addresses, 0);
+        var trace = std.builtin.StackTrace{
+            .instruction_addresses = addresses,
+            .index = 0,
+        };
+        std.debug.captureStackTrace(@returnAddress(), &trace);
+    }
+}
+
+fn dumpTrace(l: *Layout, id: usize) void {
+    if (builtin.mode == .Debug) {
+        var len: usize = 0;
+        const addresses = &l.stack_traces.items[id];
+        for (addresses) |address| {
+            if (address == 0) break;
+            len += 1;
+        }
+        const trace = std.builtin.StackTrace{
+            .instruction_addresses = addresses,
+            .index = len,
+        };
+        std.debug.dumpStackTrace(trace);
+    }
 }
 
 pub const Rect = struct {
@@ -159,13 +192,18 @@ fn childIteratorTo(self: *Layout, id: usize, last_child_id: usize) ChildIterator
 pub fn begin(l: *Layout, width: u16, height: u16) void {
     l.elements.clearRetainingCapacity();
     l.stack.clearRetainingCapacity();
+    if (builtin.mode == .Debug) l.stack_traces.clearRetainingCapacity();
     l.width = width;
     l.height = height;
 }
 
 fn endElement(l: *Layout, e: *Element) !void {
     e.w_range.add(e.spec.padding.width());
-    e.w_range = e.spec.w.intersect(e.w_range).r;
+    const intersection = e.spec.w.intersect(e.w_range) catch |err| {
+        l.dumpTrace(l.stack.getLast());
+        return err;
+    };
+    e.w_range = intersection.r;
 
     const id = l.stack.pop().?;
     const front: u16 = @intCast(l.elements.items.len);
@@ -218,13 +256,13 @@ fn resizeWidthsHorizontal(
     width: u16,
 ) void {
     element.shown_children = 0;
-
-    var iterator = self.childIterator(id);
+    element.w = width;
 
     var required = element.spec.padding.width();
     var last_child_id = id;
 
     var gap: u16 = 0;
+    var iterator = self.childIterator(id);
     while (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
         child.w = child.w_range.lo;
@@ -238,6 +276,7 @@ fn resizeWidthsHorizontal(
         gap = element.spec.gap;
     }
 
+    if (required > width) return;
     var remaining = width - required;
 
     while (remaining > 0) {
@@ -287,7 +326,6 @@ fn resizeWidthsHorizontal(
         const child, const child_id = pair;
         self.resizeWidths(child_id, child.w);
     }
-    element.w = width;
 }
 
 fn resizeWidths(l: *Layout, id: usize, width: u16) void {
@@ -303,7 +341,7 @@ fn resizeWidths(l: *Layout, id: usize, width: u16) void {
         },
         .terminal => {},
     }
-    element.w = width;
+    element.w = element.w_range.clamp(width);
 }
 
 fn resizeHeightsVertical(
@@ -313,13 +351,14 @@ fn resizeHeightsVertical(
     height: u16,
 ) void {
     e.shown_children = 0;
-
-    var iterator = l.childIterator(id);
+    e.h = height;
 
     var required = e.spec.padding.height();
+
     var last_child_id = id;
 
     var gap: u16 = 0;
+    var iterator = l.childIterator(id);
     while (iterator.nextPair()) |pair| {
         const child, const child_id = pair;
         child.h = child.h_range.lo;
@@ -334,6 +373,7 @@ fn resizeHeightsVertical(
         gap = e.spec.gap;
     }
 
+    if (required > height) return;
     var remaining = height - required;
 
     while (remaining > 0) {
@@ -383,7 +423,6 @@ fn resizeHeightsVertical(
         const child, const child_id = pair;
         l.resizeHeights(child_id, child.h);
     }
-    e.h = height;
 }
 
 fn resizeHeights(self: *Layout, id: u32, height: u16) void {
@@ -397,7 +436,7 @@ fn resizeHeights(self: *Layout, id: u32, height: u16) void {
             e.h = height;
         },
         .vertical => self.resizeHeightsVertical(e, id, height),
-        .terminal => e.h = height,
+        .terminal => e.h = e.h_range.clamp(height),
     }
 }
 
@@ -448,7 +487,10 @@ fn wrap(
                 if (!child.show) continue;
 
                 try l.wrap(ctx, wrapFn, child_id);
-                try e.h_range.accumulateParallel(child.h_range);
+                e.h_range.accumulateParallel(child.h_range) catch |err| {
+                    l.dumpTrace(id);
+                    return err;
+                };
             }
         },
         .terminal => {},
@@ -456,11 +498,21 @@ fn wrap(
 
     // Add padding
     switch (e.direction) {
-        .vertical, .horizontal => e.h_range.add(e.spec.padding.height()),
+        .vertical, .horizontal => {
+            e.h_range.add(e.spec.padding.height());
+            // Padd after last element if necessary
+            if (e.h_range.hi < e.spec.h.r.lo) {
+                e.h_range.hi = e.spec.h.r.lo;
+            }
+        },
         .terminal => {},
     }
 
-    e.h_range = e.spec.h.intersect(e.h_range).r;
+    const intersection = e.spec.h.intersect(e.h_range) catch |err| {
+        l.dumpTrace(id);
+        return err;
+    };
+    e.h_range = intersection.r;
 }
 
 fn createInstructions(l: *Layout) ![]const Instruction {
@@ -532,23 +584,26 @@ pub const Spec = struct {
     pub const any = Spec{ .r = .{ .lo = 0, .hi = 0xffff }, .grow = true };
     pub const fit = Spec{ .r = .{ .lo = 0, .hi = 0xffff }, .grow = false };
 
-    fn intersect(a: Spec, b: Range) Spec {
+    fn intersect(a: Spec, b: Range) IntersectError!Spec {
         if (a.grow) {
-            var res = Range{ .lo = @max(a.r.lo, b.lo), .hi = a.r.hi };
+            const res = Range{ .lo = @max(a.r.lo, b.lo), .hi = a.r.hi };
             if (res.hi < res.lo) {
-                std.log.warn("Element got squashed", .{});
-                res.lo = res.hi;
+                return error.RangesDisjoint;
+                //std.log.warn("Element got squashed", .{});
+                //res.lo = res.hi;
             }
-            return .{ .r = res, .grow = a.grow };
+            return .{ .r = res, .grow = true };
         } else {
             return .{
-                .r = a.r.intersect(b) orelse .{ .lo = a.r.hi, .hi = a.r.hi },
+                //.r = a.r.intersect(b) orelse .{ .lo = a.r.hi, .hi = a.r.hi },
+                .r = a.r.intersect(b) orelse return error.RangesDisjoint,
                 .grow = false,
             };
         }
     }
 };
 
+pub const IntersectError = error{RangesDisjoint};
 pub const Range = struct {
     lo: u16,
     hi: u16,
@@ -583,11 +638,8 @@ pub const Range = struct {
         return if (lo <= hi) .{ .lo = lo, .hi = hi } else null;
     }
 
-    fn accumulateParallel(a: *Range, b: Range) !void {
-        a.* = a.intersect(b) orelse {
-            @breakpoint();
-            return error.RangesDisjoint;
-        };
+    fn accumulateParallel(a: *Range, b: Range) IntersectError!void {
+        a.* = a.intersect(b) orelse return error.RangesDisjoint;
     }
 
     fn accumulateSerial(a: *Range, spill: bool, gap: u16, b: Range) void {
@@ -662,14 +714,18 @@ const BoxOptions = struct {
 };
 
 pub fn box(self: *Layout, content: Content, options: BoxOptions) !void {
+    try self.pushTrace();
+
+    const spec_w = try options.width.intersect(content.w_range);
+    const spec_h = try options.height.intersect(content.h_range);
     const element = Element{
-        .w = options.width.r.lo,
-        .w_range = options.width.r,
+        .w_range = spec_w.r,
+        .h_range = spec_h.r,
         .content = content.index,
         .spec = .{
             .gap = 0,
-            .w = options.width.intersect(content.w_range),
-            .h = options.height.intersect(content.h_range),
+            .w = spec_w,
+            .h = spec_h,
             .padding = .none,
             .spill = options.spill,
         },
@@ -683,6 +739,8 @@ pub fn box(self: *Layout, content: Content, options: BoxOptions) !void {
 }
 
 pub fn beginHorizontal(self: *Layout, content: Content, options: ContainerOptions) !void {
+    try self.pushTrace();
+
     const id = self.elements.items.len;
     try self.elements.append(
         self.allocator,
@@ -711,6 +769,8 @@ pub fn endHorizontal(l: *Layout) !void {
 }
 
 pub fn beginVertical(self: *Layout, content: Content, options: ContainerOptions) !void {
+    try self.pushTrace();
+
     const id = self.elements.items.len;
     try self.elements.append(
         self.allocator,
