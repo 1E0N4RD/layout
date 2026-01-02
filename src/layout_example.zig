@@ -342,7 +342,7 @@ pub fn main() !void {
 
     var state = State.init(1500, 1000);
 
-    const texture = try layout_sdl.staticBMPTexture(renderer, "./assets/example-image.bmp");
+    const texture = try layout_sdl.createBMPTexture(renderer, @embedFile("./assets/example-image.bmp"));
     defer c.SDL_DestroyTexture(texture);
 
     var event: c.SDL_Event = undefined;

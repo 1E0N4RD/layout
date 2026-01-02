@@ -83,13 +83,12 @@ pub const Color = struct {
     }
 };
 
-pub fn staticBMPTexture(
+pub fn createBMPTexture(
     renderer: *c.SDL_Renderer,
-    comptime path: []const u8,
+    data: []const u8,
 ) !*c.SDL_Texture {
-    const bytes = @embedFile(path);
     const surface = try checkSdl(
-        c.SDL_LoadBMP_IO(c.SDL_IOFromConstMem(bytes.ptr, bytes.len), true),
+        c.SDL_LoadBMP_IO(c.SDL_IOFromConstMem(data.ptr, data.len), true),
     );
     defer c.SDL_DestroySurface(surface);
     return checkSdl(c.SDL_CreateTextureFromSurface(renderer, surface));
