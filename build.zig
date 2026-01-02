@@ -4,6 +4,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const idlist = b.dependency("idlist", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const idlist_mod = idlist.module("idlist");
+
     const layout_mod = b.addModule("layout", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -16,6 +23,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "layout", .module = layout_mod },
+            .{ .name = "idlist", .module = idlist_mod },
         },
         .link_libc = true,
     });

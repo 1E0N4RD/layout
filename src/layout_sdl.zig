@@ -7,3 +7,5 @@ pub const assertSdl = utils.assertSdl;
 pub const checkSdl = utils.checkSdl;
 pub const createBMPTexture = utils.createBMPTexture;
 pub const Color = utils.Color;
+
+pub const Widgets = @import("Widgets.zig");

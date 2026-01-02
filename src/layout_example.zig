@@ -2,6 +2,7 @@ const std = @import("std");
 const Layout = @import("layout").Layout;
 const layout_sdl = @import("layout_sdl");
 const SDLContents = layout_sdl.SDLContents;
+const Widgets = layout_sdl.Widgets;
 const c = layout_sdl.c;
 const assertSdl = layout_sdl.assertSdl;
 
@@ -181,40 +182,42 @@ fn handleEvent(
 
 fn doLayout(
     layout: *Layout,
-    content: *SDLContents,
+    contents: *SDLContents,
+    widgets: *Widgets,
     gui_state: *GuiState,
     width: u16,
     height: u16,
     texture: *c.SDL_Texture,
 ) ![]const Layout.Instruction {
     layout.begin(@intCast(width), @intCast(height));
-    content.clear();
+    contents.clear();
 
-    const green = try content.rectangle(.{
+    const green = try contents.rectangle(.{
         .frame_width = 4,
         .background = .green,
     });
-    const white = try content.rectangle(.{
+    const white = try contents.rectangle(.{
         .background = .white,
         .frame_width = 4,
     });
-    const vertical_bar = try content.clone(white);
-    const transparent = try content.rectangle(.{
+    const vertical_bar = try contents.clone(white);
+    const transparent = try contents.rectangle(.{
         .frame_width = 4,
     });
-    const grey = try content.rectangle(.{
+    const grey = try contents.rectangle(.{
         .frame_color = .black,
         .frame_width = 4,
         .background = .grey,
     });
-    const blue = try content.rectangle(.{
+    const blue = try contents.rectangle(.{
         .frame_width = 4,
         .background = .blue,
     });
 
-    const invisible = try content.rectangle(.{});
+    const invisible = try contents.rectangle(.{});
+    try widgets.button(blue, .{});
 
-    const image = try content.texture(texture, .{ .frame_width = 1, .mode = .strict });
+    const image = try contents.texture(texture, .{ .frame_width = 1, .mode = .strict });
 
     {
         try layout.beginVertical(white, .{ .gap = 5 });
@@ -229,7 +232,7 @@ fn doLayout(
                 });
 
                 try layout.beginVertical(white, .{ .padding = .uniform(10), .height = .fixed(100) });
-                try layout.box(try content.text("Start", .{ .font = .h1 }), .{});
+                try layout.box(try contents.text("Start", .{ .font = .h1 }), .{});
                 try layout.endVertical();
 
                 try layout.box(white, .{ .height = .fixed(100) });
@@ -242,13 +245,13 @@ fn doLayout(
             try layout.box(vertical_bar, .{ .width = .fixed(10) });
 
             try layout.beginVertical(white, .{ .padding = .uniform(10), .gap = 10, .spill = true });
-            try layout.box(try content.text(lore_ipsum, .{}), .{});
-            try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
+            try layout.box(try contents.text(lore_ipsum, .{}), .{});
+            try layout.box(try contents.text(lore_ipsum, .{}), .{ .spill = true });
             try layout.box(image, .{ .width = .fit, .height = .fit });
             try layout.endVertical();
 
             try layout.beginVertical(green, .{ .width = .max(600), .padding = .uniform(10), .spill = true });
-            try layout.box(try content.text(lore_ipsum, .{}), .{ .spill = true });
+            try layout.box(try contents.text(lore_ipsum, .{}), .{ .spill = true });
             try layout.box(image, .{});
             try layout.endVertical();
 
@@ -271,7 +274,7 @@ fn doLayout(
                     .height = .fit,
                     .padding = .uniform(10),
                 });
-                try layout.box(try content.text(label, .{ .wrap = false, .font = .h1 }), .{});
+                try layout.box(try contents.text(label, .{ .wrap = false, .font = .h1 }), .{});
                 try layout.endHorizontal();
                 try layout.box(invisible, .{});
             }
@@ -282,7 +285,7 @@ fn doLayout(
         try layout.endVertical();
     }
 
-    const res = try layout.end(content, SDLContents.wrap);
+    const res = try layout.end(contents, SDLContents.wrap);
     for (res) |r| {
         if (r.content == vertical_bar.index) {
             gui_state.vertical_resize_bar = .{
@@ -333,14 +336,17 @@ pub fn main() !void {
     ));
     defer c.TTF_CloseFont(h1_font);
 
-    var content = try SDLContents.init(allocator, renderer);
-    defer content.deinit();
+    var contents = try SDLContents.init(allocator, renderer);
+    defer contents.deinit();
 
-    try content.setFont(.body, body_font);
-    try content.setFont(.h1, h1_font);
+    try contents.setFont(.body, body_font);
+    try contents.setFont(.h1, h1_font);
 
     var layout = Layout.init(allocator);
     defer layout.deinit();
+
+    var widgets = Widgets.init(allocator, &layout, &contents);
+    defer widgets.deinit();
 
     var state = State.init(1500, 1000);
 
@@ -363,14 +369,15 @@ pub fn main() !void {
 
             const instructions = try doLayout(
                 &layout,
-                &content,
+                &contents,
+                &widgets,
                 &state.gui_state,
                 @intCast(width),
                 @intCast(height),
                 texture,
             );
 
-            try content.drawInstructions(instructions);
+            try contents.drawInstructions(instructions);
 
             assertSdl(c.SDL_RenderPresent(renderer));
         }
